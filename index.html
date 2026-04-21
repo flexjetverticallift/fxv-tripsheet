@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>FXV Trip Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ================================================
+   DESIGN TOKENS
+   ================================================ */
+:root {
+  --bg:        #0b0d12;
+  --bg2:       #111318;
+  --surface:   #161a24;
+  --surface2:  #1d2130;
+  --border:    #252a38;
+  --border2:   #303650;
+  --text:      #dde3f0;
+  --text-dim:  #8892aa;
+  --text-muted:#4d5470;
+  --accent:    #4f8ef7;
+  --accent2:   #2d6fd4;
+  --green:     #3ecf8e;
+  --amber:     #f5a623;
+  --red:       #ef4444;
+  --ops:       #a78bfa;
+  --pilot:     #4f8ef7;
+  --r:         6px;
+  --r-lg:      10px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+body {
+  font-family:'DM Sans',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  font-size:14px;
+  line-height:1.4;
+}
+
+/* ================================================
+   VIEW SYSTEM
+   ================================================ */
+.view{display:none;min-height:100vh}
+.view.active{display:block}
+
+/* ================================================
+   SETUP / ONBOARDING
+   ================================================ */
+#view-setup{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:24px;
+}
+.setup-wrap{
+  width:100%;max-width:360px;
+  animation:fadeUp .3s ease;
+}
+.setup-logo-row{
+  text-align:center;margin-bottom:32px;
+}
+.setup-logo{
+  font-size:13px;font-weight:600;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;
+}
+.setup-brand{
+  font-size:28px;font-weight:700;color:var(--text);
+  font-family:'DM Mono',monospace;letter-spacing:-.5px;
+}
+.setup-brand span{color:var(--accent)}
+.setup-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:24px;
+}
+.setup-card h2{font-size:15px;font-weight:600;margin-bottom:4px}
+.setup-card p{font-size:12px;color:var(--text-dim);margin-bottom:20px}
+
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.role-opt{
+  background:var(--surface2);border:2px solid var(--border);
+  border-radius:var(--r);padding:14px 10px;
+  cursor:pointer;text-align:center;transition:all .15s;
+  user-select:none;
+}
+.role-opt:hover{border-color:var(--border2)}
+.role-opt.sel-ops{border-color:var(--ops);background:rgba(167,139,250,.08)}
+.role-opt.sel-pilot{border-color:var(--pilot);background:rgba(79,142,247,.08)}
+.role-icon{font-size:22px;margin-bottom:6px}
+.role-lbl{font-size:12px;font-weight:600;color:var(--text-dim)}
+.role-opt.sel-ops .role-lbl{color:var(--ops)}
+.role-opt.sel-pilot .role-lbl{color:var(--pilot)}
+
+/* ================================================
+   FIREBASE CONFIG
+   ================================================ */
+#view-config{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:24px;
+}
+
+/* ================================================
+   COMMON LAYOUT
+   ================================================ */
+.appbar{
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  padding:10px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:50;
+  backdrop-filter:blur(8px);
+}
+.appbar-left{display:flex;align-items:center;gap:10px}
+.appbar-brand{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--text-dim);letter-spacing:.05em}
+.appbar-title{font-size:15px;font-weight:600;color:var(--text)}
+.appbar-sub{font-size:11px;color:var(--text-muted)}
+.appbar-right{display:flex;align-items:center;gap:8px}
+
+.page{padding:14px;max-width:860px;margin:0 auto}
+
+/* ================================================
+   BUTTONS
+   ================================================ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  padding:7px 14px;border-radius:var(--r);border:none;cursor:pointer;
+  font-size:13px;font-weight:500;font-family:inherit;
+  transition:opacity .1s,background .1s;white-space:nowrap;
+}
+.btn:active{opacity:.75}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-green{background:var(--green);color:#000}
+.btn-red{background:var(--red);color:#fff}
+.btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--border2);color:var(--text)}
+.btn-ops{background:var(--ops);color:#fff}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-lg{padding:11px 20px;font-size:14px}
+.btn-block{width:100%}
+
+/* ================================================
+   FORMS
+   ================================================ */
+.fg{margin-bottom:12px}
+.fg:last-child{margin-bottom:0}
+.lbl{
+  display:block;font-size:10px;font-weight:600;
+  color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;
+  margin-bottom:4px;
+}
+input[type=text],input[type=number],input[type=date],input[type=time],
+input[type=email],select,textarea{
+  width:100%;background:var(--surface2);
+  border:1px solid var(--border);color:var(--text);
+  border-radius:var(--r);padding:8px 10px;font-size:13px;
+  font-family:inherit;transition:border-color .15s;
+}
+input:focus,select:focus,textarea:focus{
+  outline:none;border-color:var(--accent);
+}
+input::placeholder,textarea::placeholder{color:var(--text-muted)}
+select option{background:var(--surface2);color:var(--text)}
+textarea{resize:vertical;min-height:70px}
+input[type=checkbox]{
+  width:16px;height:16px;cursor:pointer;accent-color:var(--accent);
+}
+.inp-sm{padding:6px 8px;font-size:13px}
+
+.ro{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r);padding:7px 10px;
+  font-size:13px;color:var(--text-dim);min-height:34px;
+}
+.ro.mono{font-family:'DM Mono',monospace;font-size:13px}
+
+/* ================================================
+   CARDS
+   ================================================ */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:14px;
+  margin-bottom:10px;
+}
+.card-title{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text)}
+
+/* ================================================
+   GRIDS
+   ================================================ */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+@media(max-width:480px){
+  .g3{grid-template-columns:1fr 1fr}
+  .g4{grid-template-columns:1fr 1fr}
+}
+
+/* ================================================
+   SECTION DIVIDERS
+   ================================================ */
+.sec{
+  font-size:9px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--text-muted);
+  margin:14px 0 8px;display:flex;align-items:center;gap:8px;
+}
+.sec::after{content:'';flex:1;height:1px;background:var(--border)}
+.sec-pilot{color:var(--pilot)}
+.sec-ops{color:var(--ops)}
+.sec-fuel{color:var(--amber)}
+
+/* ================================================
+   D/N TOGGLE
+   ================================================ */
+.dn-wrap{display:flex;border-radius:var(--r);overflow:hidden;border:1px solid var(--border)}
+.dn-btn{
+  flex:1;padding:7px 4px;text-align:center;font-size:13px;font-weight:700;
+  cursor:pointer;background:var(--surface2);color:var(--text-muted);
+  border:none;font-family:inherit;transition:all .12s;
+}
+.dn-btn.day{background:var(--amber);color:#000}
+.dn-btn.night{background:#1a2a45;color:#60a5fa}
+.dn-btn.clear-btn{background:var(--surface2);color:var(--text-muted);font-size:10px}
+
+/* ================================================
+   TENTHS DISPLAY
+   ================================================ */
+.tenths-box{
+  background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.25);
+  border-radius:var(--r);padding:7px 10px;
+  font-family:'DM Mono',monospace;font-size:18px;font-weight:500;
+  color:var(--accent);text-align:center;
+}
+
+/* ================================================
+   STATUS BADGES
+   ================================================ */
+.badge{
+  font-size:10px;font-weight:700;padding:2px 8px;
+  border-radius:20px;text-transform:uppercase;letter-spacing:.05em;
+}
+.badge-active{background:rgba(62,207,142,.12);color:var(--green)}
+.badge-complete{background:rgba(77,84,112,.2);color:var(--text-dim)}
+.badge-ops{background:rgba(167,139,250,.12);color:var(--ops)}
+.badge-pilot{background:rgba(79,142,247,.12);color:var(--pilot)}
+
+/* ================================================
+   SYNC DOT
+   ================================================ */
+.sync{width:7px;height:7px;border-radius:50%;background:var(--text-muted)}
+.sync.on{background:var(--green)}
+.sync.ing{background:var(--amber);animation:pulse 1s infinite}
+.sync.off{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ================================================
+   TRIP LIST
+   ================================================ */
+.trip-row{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:13px 15px;
+  margin-bottom:8px;cursor:pointer;transition:border-color .15s;
+}
+.trip-row:hover{border-color:var(--border2)}
+.trip-row-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.trip-num{font-size:15px;font-weight:700;color:var(--text);font-family:'DM Mono',monospace}
+.trip-meta{font-size:12px;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap}
+.trip-route{font-size:11px;color:var(--text-muted);margin-top:3px}
+
+/* ================================================
+   LEG TABS
+   ================================================ */
+.leg-tabs{
+  display:flex;gap:3px;background:var(--surface2);
+  border-radius:var(--r);padding:3px;margin-bottom:12px;overflow-x:auto;
+}
+.leg-tab{
+  flex:1;text-align:center;padding:7px 8px;border-radius:5px;
+  font-size:11px;font-weight:600;cursor:pointer;transition:all .12s;
+  color:var(--text-muted);white-space:nowrap;min-width:70px;
+}
+.leg-tab.active{background:var(--accent);color:#fff}
+.leg-tab.done{color:var(--green)}
+.leg-tab .leg-tab-route{display:block;font-size:10px;font-weight:400;margin-top:1px}
+
+/* ================================================
+   MODAL
+   ================================================ */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;
+  display:none;align-items:flex-end;justify-content:center;padding:12px;
+}
+.overlay.open{display:flex}
+.modal{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg) var(--r-lg) var(--r-lg) var(--r-lg);
+  width:100%;max-width:580px;max-height:92vh;overflow-y:auto;padding:20px;
+}
+.modal-title{font-size:16px;font-weight:700;margin-bottom:16px}
+
+/* ================================================
+   EMPTY STATE
+   ================================================ */
+.empty{text-align:center;padding:48px 20px;color:var(--text-muted)}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.empty-h{font-size:15px;color:var(--text-dim);margin-bottom:6px}
+.empty-p{font-size:12px}
+
+/* ================================================
+   TOAST
+   ================================================ */
+.toast{
+  position:fixed;bottom:24px;left:50%;
+  transform:translateX(-50%);
+  background:var(--surface2);border:1px solid var(--border2);
+  border-radius:var(--r);padding:9px 18px;font-size:13px;
+  z-index:999;animation:fadeUp .2s ease;white-space:nowrap;
+  box-shadow:0 4px 20px rgba(0,0,0,.4);
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateX(-50%) translateY(6px)}
+  to{opacity:1;transform:translateX(-50%) translateY(0)}
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fadeOut{from{opacity:1}to{opacity:0}}
+
+/* ================================================
+   LOADING
+   ================================================ */
+.spin{
+  width:18px;height:18px;border:2px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:rotate .6s linear infinite;display:inline-block;
+}
+@keyframes rotate{to{transform:rotate(360deg)}}
+
+/* ================================================
+   MISC
+   ================================================ */
+.divider{height:1px;background:var(--border);margin:14px 0}
+.fl-row{display:flex;align-items:center;gap:8px}
+.fl-between{display:flex;align-items:center;justify-content:space-between}
+.mt8{margin-top:8px}
+.mb8{margin-bottom:8px}
+.mb12{margin-bottom:12px}
+
+/* ================================================
+   PRINT LAYOUT
+   ================================================ */
+@media print{
+  body > *:not(#print-layout){display:none !important}
+  #print-layout{display:block !important}
+  @page{size:letter landscape;margin:8mm}
+}
+#print-layout{
+  display:none;
+  font-family:Arial,Helvetica,sans-serif;
+  font-size:7.5pt;color:#000;background:#fff;
+}
+.pl-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px}
+.pl-logo{font-size:11pt;font-weight:bold;font-style:italic;color:#cc0000}
+.pl-brand{font-size:9pt;font-weight:bold;color:#000;margin-top:1px}
+.pl-flight-log{font-size:17pt;font-weight:bold;letter-spacing:.08em;color:#000}
+.pl-info{font-size:6.5pt;color:#333}
+.pl-table{width:100%;border-collapse:collapse;font-size:7pt}
+.pl-table td,.pl-table th{border:.4px solid #888;padding:1.5px 4px;vertical-align:middle}
+.pl-lbl{background:#efefef;font-size:6pt;font-weight:bold;text-align:right;padding-right:5px;white-space:nowrap;width:24%}
+.pl-val{text-align:center;font-size:7.5pt}
+.pl-val-mono{text-align:center;font-size:8pt;font-weight:bold;font-family:'Courier New',monospace}
+.pl-sec{background:#d8d8d8;font-size:6pt;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;padding:2px 4px}
+.pl-dn{font-size:9pt;font-weight:bold}
+.pl-notes-box{border:.4px solid #888;padding:5px 6px;margin-top:5px;min-height:28px}
+.pl-footer{font-size:5.5pt;color:#aaa;text-align:right;margin-top:4px}
+</style>
+</head>
+<body>
+
+<!-- ================================================
+     SETUP VIEW
+     ================================================ -->
+<div id="view-setup" class="view active">
+  <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px">
+    <div class="setup-wrap">
+      <div class="setup-logo-row">
+        <div class="setup-logo">Flexjet Vertical Lift</div>
+        <div class="setup-brand">FXV <span>Trip Sheet</span></div>
+      </div>
+      <div class="setup-card">
+        <h2>Welcome</h2>
+        <p>Tell us who you are. This device will remember your identity.</p>
+        <div class="fg">
+          <label class="lbl">Your Name / Initials</label>
+          <input type="text" id="su-name" placeholder="e.g. KJR" autocapitalize="characters" autocorrect="off" autocomplete="off">
+        </div>
+        <div class="fg">
+          <label class="lbl">Your Role</label>
+          <div class="role-grid">
+            <div class="role-opt" id="ro-ops" onclick="selectRole('ops')">
+              <div class="role-icon">🖥</div>
+              <div class="role-lbl">Operations</div>
+            </div>
+            <div class="role-opt" id="ro-pilot" onclick="selectRole('pilot')">
+              <div class="role-icon">🚁</div>
+              <div class="role-lbl">Pilot</div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block btn-lg" onclick="finishSetup()">Continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase config is hardcoded — no config view needed -->
+
+<!-- ================================================
+     TRIPS VIEW
+     ================================================ -->
+<div id="view-trips" class="view">
+  <div class="appbar">
+    <div class="appbar-left">
+      <div>
+        <div class="appbar-brand">FXV Trip Sheet</div>
+        <div class="appbar-sub" id="trips-sub"></div>
+      </div>
+    </div>
+    <div class="appbar-right">
+      <span class="sync" id="sd1"></span>
+      <div id="user-badge" class="badge"></div>
+      <button class="btn btn-ghost btn-sm" onclick="openSettings()">⚙</button>
+      <button class="btn btn-ops btn-sm" id="btn-new" onclick="openNewTrip()" style="display:none">+ New Trip</button>
+    </div>
+  </div>
+  <div class="page">
+    <div id="trips-list" style="margin-top:4px">
+      <div style="display:flex;align-items:center;gap:10px;padding:32px;color:var(--text-muted)">
+        <span class="spin"></span> Loading trips…
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
+     TRIP DETAIL VIEW
+     ================================================ -->
+<div id="view-trip" class="view">
+  <div class="appbar">
+    <div class="appbar-left">
+      <button class="btn btn-ghost btn-sm" onclick="goBack()">← Back</button>
+      <div>
+        <div class="appbar-title" id="td-trip-title">Trip</div>
+        <div class="appbar-sub" id="td-trip-sub"></div>
+      </div>
+    </div>
+    <div class="appbar-right">
+      <span class="sync" id="sd2"></span>
+      <button class="btn btn-ghost btn-sm" onclick="exportPDF()">↓ PDF</button>
+    </div>
+  </div>
+  <div class="page">
+    <!-- Info strip -->
+    <div class="card" style="padding:11px 14px;margin-bottom:10px">
+      <div class="g3">
+        <div><div class="lbl">Aircraft</div><div id="td-aircraft" style="font-family:'DM Mono',monospace;font-weight:600;font-size:14px"></div></div>
+        <div><div class="lbl">Date</div><div id="td-date" style="font-weight:600;font-size:13px"></div></div>
+        <div><div class="lbl">Trip Requester</div><div id="td-req" style="font-size:12px;color:var(--text-dim)"></div></div>
+      </div>
+    </div>
+
+    <!-- Leg tabs -->
+    <div class="leg-tabs" id="leg-tabs"></div>
+
+    <!-- Leg panels (dynamically rendered) -->
+    <div id="leg-panels"></div>
+
+    <!-- Notes -->
+    <div class="card" style="margin-top:10px">
+      <div class="card-title">✏ Trip Notes</div>
+      <textarea id="trip-notes" placeholder="Any notes for this trip…" oninput="debounceSave('notes', this.value)"></textarea>
+    </div>
+
+    <!-- Ops controls -->
+    <div id="ops-ctrl" style="display:none;margin-top:10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="addLegToTrip()">+ Add Leg</button>
+        <button class="btn btn-green btn-sm" onclick="markTripComplete()">✓ Mark Complete</button>
+        <button class="btn btn-red btn-sm" onclick="deleteTripConfirm()">Delete Trip</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
+     NEW TRIP MODAL
+     ================================================ -->
+<div class="overlay" id="modal-new">
+  <div class="modal">
+    <div class="modal-title">New Trip</div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">Trip Number</label><input type="text" id="nt-num" placeholder="83621"></div>
+      <div class="fg"><label class="lbl">Aircraft</label><input type="text" id="nt-ac" placeholder="N76FX" autocapitalize="characters"></div>
+    </div>
+    <div class="fg"><label class="lbl">Trip Requester</label><input type="text" id="nt-req" placeholder="Susquehanna Business Development"></div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">Local Date</label><input type="date" id="nt-date"></div>
+      <div class="fg"><label class="lbl">Program / Auth</label><input type="text" id="nt-prog" placeholder="Part 135 / FRAC"></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">PIC</label><input type="text" id="nt-pic" placeholder="JMA" autocapitalize="characters"></div>
+      <div class="fg"><label class="lbl">SIC</label><input type="text" id="nt-sic" placeholder="KJR" autocapitalize="characters"></div>
+    </div>
+    <div class="divider"></div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:10px">Legs</div>
+    <div id="nt-legs-wrap"></div>
+    <button class="btn btn-ghost btn-sm mb12" onclick="addNTLeg()">+ Add Leg</button>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new')">Cancel</button>
+      <button class="btn btn-primary" onclick="createTrip()">Create Trip →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
+     SETTINGS MODAL
+     ================================================ -->
+<div class="overlay" id="modal-settings">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">Settings</div>
+    <div class="fg"><label class="lbl">Name / Initials</label><input type="text" id="set-name" autocapitalize="characters"></div>
+    <div class="fg"><label class="lbl">Role</label>
+      <select id="set-role">
+        <option value="pilot">Pilot</option>
+        <option value="ops">Operations</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeModal('modal-settings')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
+     PRINT LAYOUT (hidden)
+     ================================================ -->
+<div id="print-layout"></div>
+
+<!-- ================================================
+     FIREBASE SDK
+     ================================================ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+'use strict';
+// ============================================================
+// CONSTANTS
+// ============================================================
+const K_USER = 'fxv_ts_user';
+
+// Hardcoded Firebase config — no user input needed
+const FB_CONFIG = {
+  apiKey:            "AIzaSyCfzmfGTgRf9FFKe_AndjgbRBwvnO8LCf4",
+  authDomain:        "fxv-trip-sheets.firebaseapp.com",
+  projectId:         "fxv-trip-sheets",
+  storageBucket:     "fxv-trip-sheets.firebasestorage.app",
+  messagingSenderId: "547529347311",
+  appId:             "1:547529347311:web:235ee751560dfebeb74b1a"
+};
+
+const PR_TYPES = ['', 'GBAS', 'ILS'];
+const NP_TYPES = ['', 'Circling', 'LNAV', 'LNAV+V', 'LNAV/VNAV', 'LDA', 'LOC', 'LP', 'LPV', 'NDB', 'VOR'];
+
+// ============================================================
+// MINUTES → TENTHS (AAG Chart, cyclic)
+// ============================================================
+const BASE_RANGES = [
+  [1,9,0.1],[10,14,0.2],[15,21,0.3],[22,26,0.4],[27,33,0.5],
+  [34,38,0.6],[39,45,0.7],[46,50,0.8],[51,57,0.9],[58,62,1.0],
+  [63,69,1.1],[70,74,1.2],[75,81,1.3],[82,86,1.4],[87,93,1.5]
+];
+function minToTenths(m) {
+  m = parseInt(m);
+  if (!m || m <= 0) return '';
+  const PERIOD = 93, CYCLE = 1.5;
+  const cycles = Math.floor((m - 1) / PERIOD);
+  const rem    = ((m - 1) % PERIOD) + 1;
+  let base = 0;
+  for (const [lo, hi, v] of BASE_RANGES) {
+    if (rem >= lo && rem <= hi) { base = v; break; }
+  }
+  return (cycles * CYCLE + base).toFixed(1);
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let db            = null;
+let currentUser   = null;
+let currentTrip   = null;
+let currentLeg    = 0;
+let unsubTrips    = null;
+let unsubTrip     = null;
+let ntLegCount    = 0;
+const saveTimers  = {};  // debounce map
+
+// ============================================================
+// FIREBASE
+// ============================================================
+function initFirebase(cfg) {
+  if (typeof firebase === 'undefined') {
+    toast('Firebase SDK not loaded. In Brave, try: Shields → Allow all cookies for this site.');
+    return false;
+  }
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(cfg);
+    }
+  } catch(e) {
+    console.error('Firebase initializeApp error:', e);
+    toast('Firebase init error: ' + e.message);
+    return false;
+  }
+  if (!db) {
+    try {
+      db = firebase.firestore();
+    } catch(e) {
+      // In Brave with strict fingerprinting or blocked storage, firestore() can throw a SecurityError
+      console.error('Firestore unavailable:', e);
+      toast('Firestore blocked — in Brave try: Shields ▸ Fingerprinting ▸ Standard (or disable Shields for this page)');
+      return false;
+    }
+    // Omit synchronizeTabs — BroadcastChannel is blocked by Brave's strict mode
+    db.enablePersistence().catch(e => {
+      // failed-precondition = multiple tabs; unimplemented = unsupported browser; both are benign
+      if (e.code !== 'failed-precondition' && e.code !== 'unimplemented') {
+        console.warn('Persistence unavailable:', e.code, e.message);
+      }
+    });
+    window.addEventListener('online',  () => setSyncState('on'));
+    window.addEventListener('offline', () => setSyncState('off'));
+  }
+  return true;
+}
+
+function setSyncState(s) {
+  document.querySelectorAll('.sync').forEach(el => {
+    el.className = 'sync ' + s;
+  });
+}
+
+// ============================================================
+// VIEWS
+// ============================================================
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + id).classList.add('active');
+}
+
+// ============================================================
+// SETUP
+// ============================================================
+let selectedRole = null;
+
+function selectRole(r) {
+  selectedRole = r;
+  document.getElementById('ro-ops').className   = 'role-opt' + (r === 'ops'   ? ' sel-ops'   : '');
+  document.getElementById('ro-pilot').className = 'role-opt' + (r === 'pilot' ? ' sel-pilot' : '');
+}
+
+function finishSetup() {
+  const name = document.getElementById('su-name').value.trim();
+  if (!name)         { toast('Enter your name or initials'); return; }
+  if (!selectedRole) { toast('Select your role');            return; }
+  currentUser = { name, role: selectedRole };
+  try { localStorage.setItem(K_USER, JSON.stringify(currentUser)); } catch(e) { console.warn('localStorage write blocked:', e); }
+  boot();
+}
+
+// Firebase config is hardcoded — no user config screen needed
+
+// ============================================================
+// BOOT
+// ============================================================
+function boot() {
+  try {
+    const uRaw = localStorage.getItem(K_USER);
+    if (uRaw) currentUser = JSON.parse(uRaw);
+  } catch(e) { console.warn('localStorage read blocked:', e); }
+
+  if (!currentUser) { showView('setup'); return; }
+
+  if (!initFirebase(FB_CONFIG)) {
+    // initFirebase already toasted a specific message; bail here
+    return;
+  }
+
+  updateUserUI();
+  showView('trips');
+  loadTrips();
+}
+
+function updateUserUI() {
+  if (!currentUser) return;
+  const badge = document.getElementById('user-badge');
+  if (badge) {
+    badge.className = 'badge badge-' + currentUser.role;
+    badge.textContent = currentUser.name;
+  }
+  const sub = document.getElementById('trips-sub');
+  if (sub) sub.textContent = currentUser.role === 'ops' ? 'Operations' : 'Pilot';
+  const newBtn = document.getElementById('btn-new');
+  if (newBtn) newBtn.style.display = currentUser.role === 'ops' ? '' : 'none';
+}
+
+// ============================================================
+// TRIPS LIST
+// ============================================================
+function loadTrips() {
+  if (!db) return;
+  if (unsubTrips) unsubTrips();
+  unsubTrips = db.collection('trips')
+    .orderBy('createdAt', 'desc')
+    .limit(60)
+    .onSnapshot(snap => {
+      setSyncState('on');
+      renderTrips(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, e => { setSyncState('off'); console.error(e); });
+}
+
+function renderTrips(list) {
+  const el = document.getElementById('trips-list');
+  if (!list.length) {
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">📋</div>
+      <div class="empty-h">No trips yet</div>
+      <div class="empty-p">${currentUser.role === 'ops' ? 'Create a new trip to get started.' : 'Trip sheets will appear here once created by Operations.'}</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = list.map(t => {
+    const legs  = t.legs || [];
+    const route = legs.map(l => `${l.dept||'?'}→${l.dest||'?'}`).join(' · ');
+    const done  = legs.filter(l => l.offTime && l.onTime).length;
+    return `<div class="trip-row" onclick="openTrip('${t.id}')">
+      <div class="trip-row-top">
+        <span class="trip-num">Trip ${t.tripNumber || t.id.slice(-6)}</span>
+        <span class="badge badge-${t.status === 'completed' ? 'complete' : 'active'}">${t.status || 'active'}</span>
+      </div>
+      <div class="trip-meta">
+        <span>✈ ${t.aircraft||''}</span>
+        <span>📅 ${fmtDate(t.localDate)}</span>
+        <span>${legs.length} leg${legs.length!==1?'s':''} · ${done}/${legs.length} filled</span>
+      </div>
+      <div class="trip-route">${route} &nbsp;·&nbsp; ${t.tripRequester||''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// NEW TRIP MODAL
+// ============================================================
+function openNewTrip() {
+  if (currentUser.role !== 'ops') { toast('Only Operations can create trips'); return; }
+  ntLegCount = 0;
+  document.getElementById('nt-legs-wrap').innerHTML = '';
+  document.getElementById('nt-num').value  = '';
+  document.getElementById('nt-ac').value   = '';
+  document.getElementById('nt-req').value  = '';
+  document.getElementById('nt-prog').value = 'Part 135 / FRAC';
+  document.getElementById('nt-pic').value  = '';
+  document.getElementById('nt-sic').value  = '';
+  document.getElementById('nt-date').value = new Date().toISOString().split('T')[0];
+  addNTLeg(); addNTLeg(); // default 2 legs
+  openModal('modal-new');
+}
+
+function addNTLeg() {
+  ntLegCount++;
+  const n = ntLegCount;
+  const div = document.createElement('div');
+  div.id = `ntl${n}`;
+  div.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px';
+  div.innerHTML = `
+    <div class="fl-between mb8">
+      <span style="font-size:12px;font-weight:700;color:var(--text-dim)">LEG ${n}</span>
+      ${n>1?`<button class="btn btn-ghost btn-sm" onclick="rmNTLeg(${n})">Remove</button>`:''}
+    </div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">DEPT</label><input type="text" id="ntl${n}-dept" class="inp-sm" placeholder="HPN" autocapitalize="characters"></div>
+      <div class="fg"><label class="lbl">DEST</label><input type="text" id="ntl${n}-dest" class="inp-sm" placeholder="TEB" autocapitalize="characters"></div>
+      <div class="fg"><label class="lbl">DEPT Full Name</label><input type="text" id="ntl${n}-dname" class="inp-sm" placeholder="Westchester County"></div>
+      <div class="fg"><label class="lbl">DEST Full Name</label><input type="text" id="ntl${n}-aname" class="inp-sm" placeholder="Teterboro Airport"></div>
+      <div class="fg"><label class="lbl">ETD</label><input type="time" id="ntl${n}-etd" class="inp-sm"></div>
+      <div class="fg"><label class="lbl">ETA</label><input type="time" id="ntl${n}-eta" class="inp-sm"></div>
+      <div class="fg"><label class="lbl">ETE</label><input type="text" id="ntl${n}-ete" class="inp-sm" placeholder="00:36"></div>
+      <div class="fg"><label class="lbl">NM</label><input type="text" id="ntl${n}-nm" class="inp-sm" placeholder="73"></div>
+      <div class="fg"><label class="lbl">Est Burn</label><input type="text" id="ntl${n}-burn" class="inp-sm" placeholder="370"></div>
+      <div class="fg"><label class="lbl">DEPT FBO</label><input type="text" id="ntl${n}-dfbo" class="inp-sm" placeholder="Jet Aviation"></div>
+      <div class="fg"><label class="lbl">DEPT FBO Phone</label><input type="text" id="ntl${n}-dfboph" class="inp-sm"></div>
+      <div class="fg"><label class="lbl">ARRV FBO</label><input type="text" id="ntl${n}-afbo" class="inp-sm" placeholder="SIG"></div>
+      <div class="fg"><label class="lbl">ARRV FBO Phone</label><input type="text" id="ntl${n}-afboph" class="inp-sm"></div>
+    </div>
+    <div class="fg">
+      <label class="lbl">Passengers (one per line: Name, Weight)</label>
+      <textarea id="ntl${n}-pax" style="min-height:50px;font-size:12px" placeholder="Dantchik, Arthur, 180"></textarea>
+    </div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">PAX Dept Transport</label><input type="text" id="ntl${n}-ptrans" class="inp-sm"></div>
+      <div class="fg"><label class="lbl">PAX Arrv Transport</label><input type="text" id="ntl${n}-atrans" class="inp-sm"></div>
+    </div>
+    <div class="fg"><label class="lbl">Catering</label><input type="text" id="ntl${n}-cat" class="inp-sm"></div>
+  `;
+  document.getElementById('nt-legs-wrap').appendChild(div);
+}
+
+function rmNTLeg(n) {
+  const el = document.getElementById(`ntl${n}`);
+  if (el) el.remove();
+}
+
+function gv(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+async function createTrip() {
+  const num = gv('nt-num'), ac = gv('nt-ac');
+  if (!num || !ac) { toast('Trip number and aircraft are required'); return; }
+
+  const legs = [];
+  for (let n = 1; n <= ntLegCount; n++) {
+    if (!document.getElementById(`ntl${n}`)) continue;
+    const paxRaw = gv(`ntl${n}-pax`);
+    const passengers = paxRaw ? paxRaw.split('\n').filter(Boolean).map(line => {
+      const p = line.split(',');
+      return { name: (p.slice(0, p.length-1).join(',')).trim(), weight: parseInt(p[p.length-1]) || 0 };
+    }) : [];
+    legs.push({
+      dept: gv(`ntl${n}-dept`).toUpperCase(),
+      dest: gv(`ntl${n}-dest`).toUpperCase(),
+      deptName: gv(`ntl${n}-dname`),
+      destName: gv(`ntl${n}-aname`),
+      etd: gv(`ntl${n}-etd`), eta: gv(`ntl${n}-eta`),
+      ete: gv(`ntl${n}-ete`), nm: gv(`ntl${n}-nm`),
+      estBurn: gv(`ntl${n}-burn`),
+      deptFBO: gv(`ntl${n}-dfbo`), deptFBOPhone: gv(`ntl${n}-dfboph`),
+      arrvFBO: gv(`ntl${n}-afbo`), arrvFBOPhone: gv(`ntl${n}-afboph`),
+      passengers, paxDeptTrans: gv(`ntl${n}-ptrans`),
+      paxArrvTrans: gv(`ntl${n}-atrans`), catering: gv(`ntl${n}-cat`),
+      // pilot fields
+      offTime:'', onTime:'', pilotFlying:'',
+      fltMinutes:'', fltTenths:'',
+      takeoffType:'', landingType:'',
+      prApproach:'', npApproach:'',
+      niteMin:'', instMin:'',
+      fuelOut:'', fuelIn:'', qtyPurchased:'',
+      fuelContamDept:false, fuelContamDest:false,
+    });
+  }
+
+  try {
+    const ref = await db.collection('trips').add({
+      tripNumber: num, aircraft: ac,
+      tripRequester: gv('nt-req'), localDate: gv('nt-date'),
+      program: gv('nt-prog'),
+      pic: gv('nt-pic').toUpperCase(), sic: gv('nt-sic').toUpperCase(),
+      legs, notes: '', status: 'active',
+      createdBy: currentUser.name,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    closeModal('modal-new');
+    toast('Trip created');
+    openTrip(ref.id);
+  } catch(e) { toast('Error: ' + e.message); console.error(e); }
+}
+
+// ============================================================
+// OPEN TRIP
+// ============================================================
+function openTrip(id) {
+  showView('trip');
+  currentLeg = 0;
+  if (unsubTrip) unsubTrip();
+  unsubTrip = db.collection('trips').doc(id).onSnapshot(snap => {
+    if (!snap.exists) { showView('trips'); return; }
+    const prev = currentTrip;
+    currentTrip = { id: snap.id, ...snap.data() };
+    renderTrip(currentTrip, prev);
+    setSyncState('on');
+  }, e => { setSyncState('off'); console.error(e); });
+}
+
+function goBack() {
+  if (unsubTrip) { unsubTrip(); unsubTrip = null; }
+  showView('trips');
+}
+
+// ============================================================
+// RENDER TRIP DETAIL
+// ============================================================
+function renderTrip(trip, prevTrip) {
+  document.getElementById('td-trip-title').textContent = `Trip ${trip.tripNumber}`;
+  document.getElementById('td-trip-sub').textContent   = `${trip.aircraft} · ${trip.program||''}`;
+  document.getElementById('td-aircraft').textContent   = trip.aircraft;
+  document.getElementById('td-date').textContent       = fmtDate(trip.localDate);
+  document.getElementById('td-req').textContent        = trip.tripRequester;
+
+  // Notes — only update if not focused
+  const notesEl = document.getElementById('trip-notes');
+  if (notesEl && document.activeElement !== notesEl) notesEl.value = trip.notes || '';
+
+  // Ops controls
+  document.getElementById('ops-ctrl').style.display = currentUser.role === 'ops' ? 'block' : 'none';
+
+  const legs = trip.legs || [];
+
+  // Re-render tabs always
+  renderLegTabs(legs);
+
+  // Check if we need full panel rebuild (leg count changed) or smart update
+  const panelsEl = document.getElementById('leg-panels');
+  const panelCount = panelsEl.querySelectorAll('.leg-panel').length;
+  if (panelCount !== legs.length) {
+    // Full rebuild
+    panelsEl.innerHTML = legs.map((leg, i) => buildLegPanel(leg, i, trip)).join('');
+  } else {
+    // Smart update — don't touch focused inputs
+    legs.forEach((leg, i) => smartUpdateLeg(leg, i, trip));
+  }
+
+  // Show active panel
+  panelsEl.querySelectorAll('.leg-panel').forEach((p, i) => {
+    p.style.display = i === currentLeg ? 'block' : 'none';
+  });
+}
+
+function renderLegTabs(legs) {
+  const tabsEl = document.getElementById('leg-tabs');
+  tabsEl.innerHTML = legs.map((l, i) => {
+    const done = l.offTime && l.onTime && l.pilotFlying;
+    return `<div class="leg-tab ${i===currentLeg?'active':done?'done':''}" onclick="switchLeg(${i})">
+      LEG ${i+1}
+      <span class="leg-tab-route">${l.dept||'?'}→${l.dest||'?'}</span>
+    </div>`;
+  }).join('');
+}
+
+function switchLeg(i) {
+  currentLeg = i;
+  document.querySelectorAll('.leg-tab').forEach((t, idx) => {
+    const legs = currentTrip?.legs || [];
+    const done = legs[idx]?.offTime && legs[idx]?.onTime && legs[idx]?.pilotFlying;
+    t.className = `leg-tab ${idx===i?'active':done?'done':''}`;
+  });
+  document.querySelectorAll('.leg-panel').forEach((p, idx) => {
+    p.style.display = idx === i ? 'block' : 'none';
+  });
+}
+
+// ============================================================
+// BUILD LEG PANEL HTML
+// ============================================================
+function buildLegPanel(leg, i, trip) {
+  const isOps = currentUser.role === 'ops';
+  const pax    = leg.passengers || [];
+  const paxTot = pax.reduce((s, p) => s + (p.weight||0), 0);
+  const paxStr = pax.length ? pax.map(p => `${p.name} (${p.weight} lbs)`).join(', ') : '—';
+
+  const selPR = (v) => PR_TYPES.map(t => `<option value="${t}" ${leg.prApproach===t?'selected':''}>${t||'—'}</option>`).join('');
+  const selNP = (v) => NP_TYPES.map(t => `<option value="${t}" ${leg.npApproach===t?'selected':''}>${t||'—'}</option>`).join('');
+
+  return `
+  <div class="card leg-panel" id="lp-${i}" style="display:none">
+
+    <div class="sec sec-ops">Operations Pre-Fill</div>
+    <div class="g2 mb8">
+      ${isOps
+        ? `<div class="fg"><label class="lbl">DEPT</label><input type="text" class="inp-sm" value="${esc(leg.dept)}" onchange="updateLegF(${i},'dept',this.value.toUpperCase())" autocapitalize="characters"></div>
+           <div class="fg"><label class="lbl">DEST</label><input type="text" class="inp-sm" value="${esc(leg.dest)}" onchange="updateLegF(${i},'dest',this.value.toUpperCase())" autocapitalize="characters"></div>`
+        : `<div><label class="lbl">DEPT</label><div class="ro mono" style="font-weight:700;font-size:15px">${leg.dept||'—'}</div></div>
+           <div><label class="lbl">DEST</label><div class="ro mono" style="font-weight:700;font-size:15px">${leg.dest||'—'}</div></div>`}
+    </div>
+    <div class="g4 mb8">
+      <div><label class="lbl">ETD</label><div class="ro">${leg.etd||'—'}</div></div>
+      <div><label class="lbl">ETA</label><div class="ro">${leg.eta||'—'}</div></div>
+      <div><label class="lbl">ETE</label><div class="ro">${leg.ete||'—'}</div></div>
+      <div><label class="lbl">NM</label><div class="ro">${leg.nm||'—'}</div></div>
+    </div>
+    <div class="g2 mb8">
+      <div><label class="lbl">Est Burn</label><div class="ro">${leg.estBurn||'—'}</div></div>
+      <div><label class="lbl">PIC / SIC</label><div class="ro">${trip.pic||'—'} / ${trip.sic||'—'}</div></div>
+    </div>
+    <div class="g2 mb8">
+      <div><label class="lbl">DEPT FBO</label><div class="ro" style="font-size:12px">${leg.deptFBO||'—'}${leg.deptFBOPhone?' · '+leg.deptFBOPhone:''}</div></div>
+      <div><label class="lbl">ARRV FBO</label><div class="ro" style="font-size:12px">${leg.arrvFBO||'—'}${leg.arrvFBOPhone?' · '+leg.arrvFBOPhone:''}</div></div>
+    </div>
+    <div class="mb8">
+      <label class="lbl">Passengers</label>
+      <div class="ro" style="font-size:12px">${paxStr} ${paxTot>0?`<span style="color:var(--text-muted)">(Total: ${paxTot} lbs)</span>`:''}</div>
+    </div>
+
+    <!-- ── PILOT FIELDS ── -->
+    <div class="sec sec-pilot">Pilot Entry</div>
+
+    <div class="g2 mb8" id="lp-${i}-times">
+      <div class="fg"><label class="lbl">OFF (Block Out)</label>
+        <input type="text" id="lp-${i}-off" class="inp-sm" maxlength="4" value="${esc(leg.offTime)}"
+          placeholder="1153" oninput="updateLegF(${i},'offTime',this.value)">
+      </div>
+      <div class="fg"><label class="lbl">ON (Block In)</label>
+        <input type="text" id="lp-${i}-on" class="inp-sm" maxlength="4" value="${esc(leg.onTime)}"
+          placeholder="1207" oninput="updateLegF(${i},'onTime',this.value)">
+      </div>
+    </div>
+
+    <div class="g2 mb8">
+      <div class="fg"><label class="lbl">Pilot Flying</label>
+        <input type="text" id="lp-${i}-pf" class="inp-sm" maxlength="6" value="${esc(leg.pilotFlying)}"
+          placeholder="${trip.pic||'Initials'}" autocapitalize="characters"
+          oninput="updateLegF(${i},'pilotFlying',this.value.toUpperCase())">
+      </div>
+      <div class="fg"><label class="lbl">FLT Minutes</label>
+        <input type="number" id="lp-${i}-fltm" class="inp-sm" min="0" max="600" value="${esc(leg.fltMinutes)}"
+          placeholder="36" oninput="onFltMinutes(${i},this.value)">
+      </div>
+    </div>
+
+    <div class="mb8">
+      <label class="lbl">FLT Time (Tenths) — auto</label>
+      <div class="tenths-box" id="lp-${i}-tenths">${leg.fltTenths||'—'}</div>
+    </div>
+
+    <div class="g2 mb8">
+      <div>
+        <label class="lbl">Takeoff</label>
+        <div class="dn-wrap">
+          <button class="dn-btn ${leg.takeoffType==='D'?'day':''}" onclick="setDN(${i},'takeoffType','D')">D</button>
+          <button class="dn-btn ${leg.takeoffType==='N'?'night':''}" onclick="setDN(${i},'takeoffType','N')">N</button>
+          <button class="dn-btn clear-btn" onclick="setDN(${i},'takeoffType','')">✕</button>
+        </div>
+      </div>
+      <div>
+        <label class="lbl">Landing</label>
+        <div class="dn-wrap">
+          <button class="dn-btn ${leg.landingType==='D'?'day':''}" onclick="setDN(${i},'landingType','D')">D</button>
+          <button class="dn-btn ${leg.landingType==='N'?'night':''}" onclick="setDN(${i},'landingType','N')">N</button>
+          <button class="dn-btn clear-btn" onclick="setDN(${i},'landingType','')">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="g2 mb8">
+      <div class="fg"><label class="lbl">PR Approach</label>
+        <select id="lp-${i}-pr" class="inp-sm" onchange="updateLegF(${i},'prApproach',this.value)">${selPR()}</select>
+      </div>
+      <div class="fg"><label class="lbl">NP Approach</label>
+        <select id="lp-${i}-np" class="inp-sm" onchange="updateLegF(${i},'npApproach',this.value)">${selNP()}</select>
+      </div>
+    </div>
+
+    <div class="g2 mb8">
+      <div class="fg"><label class="lbl">NITE (min)</label>
+        <input type="number" id="lp-${i}-nite" class="inp-sm" min="0" value="${esc(leg.niteMin)}"
+          placeholder="0" oninput="updateLegF(${i},'niteMin',this.value)">
+      </div>
+      <div class="fg"><label class="lbl">INST (min)</label>
+        <input type="number" id="lp-${i}-inst" class="inp-sm" min="0" value="${esc(leg.instMin)}"
+          placeholder="0" oninput="updateLegF(${i},'instMin',this.value)">
+      </div>
+    </div>
+
+    <div class="sec sec-fuel">Fuel</div>
+
+    <div class="g3 mb8">
+      <div class="fg"><label class="lbl">Fuel Out</label>
+        <input type="text" id="lp-${i}-fout" class="inp-sm" value="${esc(leg.fuelOut)}"
+          placeholder="lbs" oninput="updateLegF(${i},'fuelOut',this.value)">
+      </div>
+      <div class="fg"><label class="lbl">Fuel In</label>
+        <input type="text" id="lp-${i}-fin" class="inp-sm" value="${esc(leg.fuelIn)}"
+          placeholder="lbs" oninput="updateLegF(${i},'fuelIn',this.value)">
+      </div>
+      <div class="fg"><label class="lbl">Qty Purchased</label>
+        <input type="text" id="lp-${i}-qty" class="inp-sm" value="${esc(leg.qtyPurchased)}"
+          placeholder="gal" oninput="updateLegF(${i},'qtyPurchased',this.value)">
+      </div>
+    </div>
+
+    <div class="mb8">
+      <label class="lbl" style="margin-bottom:6px">Fuel Contamination Checked</label>
+      <div style="display:flex;gap:16px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="lp-${i}-fcd" ${leg.fuelContamDept?'checked':''}
+            onchange="updateLegF(${i},'fuelContamDept',this.checked)"> DEPT
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="lp-${i}-fca" ${leg.fuelContamDest?'checked':''}
+            onchange="updateLegF(${i},'fuelContamDest',this.checked)"> DEST
+        </label>
+      </div>
+    </div>
+
+    ${leg.lastBy ? `<div style="font-size:10px;color:var(--text-muted);text-align:right;margin-top:8px">Last updated by ${leg.lastBy}</div>` : ''}
+  </div>`;
+}
+
+// Smart update — only set values for inputs not currently focused
+function smartUpdateLeg(leg, i, trip) {
+  const su = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = val ?? '';
+  };
+  const sc = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.checked = !!val;
+  };
+  su(`lp-${i}-off`,  leg.offTime||'');
+  su(`lp-${i}-on`,   leg.onTime||'');
+  su(`lp-${i}-pf`,   leg.pilotFlying||'');
+  su(`lp-${i}-fltm`, leg.fltMinutes||'');
+  su(`lp-${i}-pr`,   leg.prApproach||'');
+  su(`lp-${i}-np`,   leg.npApproach||'');
+  su(`lp-${i}-nite`, leg.niteMin||'');
+  su(`lp-${i}-inst`, leg.instMin||'');
+  su(`lp-${i}-fout`, leg.fuelOut||'');
+  su(`lp-${i}-fin`,  leg.fuelIn||'');
+  su(`lp-${i}-qty`,  leg.qtyPurchased||'');
+  sc(`lp-${i}-fcd`,  leg.fuelContamDept);
+  sc(`lp-${i}-fca`,  leg.fuelContamDest);
+
+  // Tenths
+  const tb = document.getElementById(`lp-${i}-tenths`);
+  if (tb) tb.textContent = leg.fltTenths || '—';
+
+  // D/N buttons
+  refreshDN(i, 'takeoffType', leg.takeoffType);
+  refreshDN(i, 'landingType', leg.landingType);
+
+  // lastBy
+  const panel = document.getElementById(`lp-${i}`);
+  if (panel && leg.lastBy) {
+    let lbEl = panel.querySelector('.lastby');
+    if (!lbEl) {
+      lbEl = document.createElement('div');
+      lbEl.className = 'lastby';
+      lbEl.style.cssText = 'font-size:10px;color:var(--text-muted);text-align:right;margin-top:8px';
+      panel.appendChild(lbEl);
+    }
+    lbEl.textContent = `Last updated by ${leg.lastBy}`;
+  }
+}
+
+function refreshDN(i, field, val) {
+  // Find the dn-wrap for this field
+  const panel = document.getElementById(`lp-${i}`);
+  if (!panel) return;
+  const wraps = panel.querySelectorAll('.dn-wrap');
+  const idx   = field === 'takeoffType' ? 0 : 1;
+  if (!wraps[idx]) return;
+  const btns = wraps[idx].querySelectorAll('.dn-btn');
+  btns[0].className = 'dn-btn' + (val==='D' ? ' day'   : '');
+  btns[1].className = 'dn-btn' + (val==='N' ? ' night' : '');
+  btns[2].className = 'dn-btn clear-btn';
+}
+
+// ============================================================
+// LEG FIELD UPDATES
+// ============================================================
+async function updateLegF(i, field, value) {
+  if (!currentTrip) return;
+  // Optimistic local update
+  if (!currentTrip.legs[i]) return;
+  currentTrip.legs[i][field] = value;
+  currentTrip.legs[i].lastBy = currentUser.name;
+
+  // Debounce Firestore write
+  const key = `${i}-${field}`;
+  clearTimeout(saveTimers[key]);
+  saveTimers[key] = setTimeout(async () => {
+    setSyncState('ing');
+    try {
+      await db.collection('trips').doc(currentTrip.id).update({ legs: currentTrip.legs });
+      setSyncState('on');
+    } catch(e) { setSyncState('off'); console.error(e); }
+  }, 600);
+}
+
+async function onFltMinutes(i, val) {
+  const tenths = minToTenths(val);
+  const tb = document.getElementById(`lp-${i}-tenths`);
+  if (tb) tb.textContent = tenths || '—';
+  await updateLegF(i, 'fltMinutes', val);
+  if (!currentTrip?.legs[i]) return;
+  currentTrip.legs[i].fltTenths = tenths;
+  const key = `${i}-fltTenths`;
+  clearTimeout(saveTimers[key]);
+  saveTimers[key] = setTimeout(async () => {
+    try { await db.collection('trips').doc(currentTrip.id).update({ legs: currentTrip.legs }); } catch(e){}
+  }, 600);
+}
+
+async function setDN(i, field, val) {
+  if (!currentTrip?.legs[i]) return;
+  const cur = currentTrip.legs[i][field];
+  const nv  = cur === val ? '' : val;
+  refreshDN(i, field, nv);
+  await updateLegF(i, field, nv);
+}
+
+function debounceSave(field, value) {
+  if (!currentTrip) return;
+  clearTimeout(saveTimers['trip-' + field]);
+  saveTimers['trip-' + field] = setTimeout(async () => {
+    setSyncState('ing');
+    try {
+      await db.collection('trips').doc(currentTrip.id).update({ [field]: value });
+      setSyncState('on');
+    } catch(e) { setSyncState('off'); }
+  }, 700);
+}
+
+async function addLegToTrip() {
+  if (!currentTrip || currentUser.role !== 'ops') return;
+  const legs = [...(currentTrip.legs||[])];
+  legs.push({
+    dept:'',dest:'',deptName:'',destName:'',etd:'',eta:'',ete:'',nm:'',
+    estBurn:'',deptFBO:'',deptFBOPhone:'',arrvFBO:'',arrvFBOPhone:'',
+    passengers:[],paxDeptTrans:'',paxArrvTrans:'',catering:'',
+    offTime:'',onTime:'',pilotFlying:'',fltMinutes:'',fltTenths:'',
+    takeoffType:'',landingType:'',prApproach:'',npApproach:'',
+    niteMin:'',instMin:'',fuelOut:'',fuelIn:'',qtyPurchased:'',
+    fuelContamDept:false,fuelContamDest:false,
+  });
+  await db.collection('trips').doc(currentTrip.id).update({ legs });
+}
+
+async function markTripComplete() {
+  if (!currentTrip || currentUser.role !== 'ops') return;
+  await db.collection('trips').doc(currentTrip.id).update({ status: 'completed' });
+  toast('Trip marked complete');
+}
+
+async function deleteTripConfirm() {
+  if (!currentTrip || currentUser.role !== 'ops') return;
+  if (!confirm('Delete this trip permanently?')) return;
+  await db.collection('trips').doc(currentTrip.id).delete();
+  goBack();
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+function openSettings() {
+  document.getElementById('set-name').value = currentUser.name;
+  document.getElementById('set-role').value = currentUser.role;
+  openModal('modal-settings');
+}
+
+function saveSettings() {
+  const name = document.getElementById('set-name').value.trim();
+  const role = document.getElementById('set-role').value;
+  if (!name) { toast('Name cannot be empty'); return; }
+  currentUser = { name, role };
+  try { localStorage.setItem(K_USER, JSON.stringify(currentUser)); } catch(e) { console.warn('localStorage write blocked:', e); }
+  updateUserUI();
+  closeModal('modal-settings');
+  toast('Saved');
+}
+
+// ============================================================
+// PDF EXPORT
+// ============================================================
+function exportPDF() {
+  if (!currentTrip) return;
+  buildPrintLayout(currentTrip);
+  // Small delay to let the DOM render
+  setTimeout(() => window.print(), 80);
+}
+
+function buildPrintLayout(trip) {
+  const legs = trip.legs || [];
+  const now  = new Date().toLocaleString('en-US', {
+    month:'short',day:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false
+  });
+  const nc   = legs.length;
+
+  // Helper
+  const val = (v) => v || '';
+  const dn  = (v) => v ? `<span class="pl-dn">${v}</span>` : '';
+
+  // Build row per field
+  const row = (label, vals, mono=false) => `
+    <tr>
+      <td class="pl-lbl">${label}</td>
+      ${vals.map(v => `<td class="pl-val ${mono?'pl-val-mono':''}">${v??''}</td>`).join('')}
+    </tr>`;
+
+  const printEl = document.getElementById('print-layout');
+  printEl.innerHTML = `
+    <div class="pl-header">
+      <div>
+        <div class="pl-logo">FLEXJET VERTICAL LIFT &nbsp; <span style="font-size:9pt;font-style:normal;color:#000">✈</span></div>
+        <div class="pl-brand" style="font-size:22pt;letter-spacing:-.5px;font-style:italic">FLeXJeT <span style="font-size:14pt;font-style:normal">✈</span></div>
+      </div>
+      <div style="text-align:right">
+        <div class="pl-flight-log">FLIGHT LOG</div>
+        <div class="pl-info">Trip: <b>${trip.tripNumber||''} / ${trip.program||''}</b></div>
+        <div class="pl-info">Aircraft: <b>${trip.aircraft||''}</b></div>
+        <div class="pl-info">Trip Requester: <b>${trip.tripRequester||''}</b></div>
+        <div class="pl-info" style="color:#888">PRINTED: ${now} &nbsp; Page 1 of 1</div>
+      </div>
+    </div>
+
+    <table class="pl-table">
+      <thead>
+        <tr>
+          <th class="pl-lbl" style="background:#fff;border:none"></th>
+          ${legs.map((_,i) => `<th style="font-size:9pt;font-weight:bold;letter-spacing:.05em">LEG ${i+1}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${row('LOCAL DATE',          legs.map(_ => fmtDate(trip.localDate)))}
+        ${row('PIC',                 legs.map(_ => trip.pic||''), true)}
+        ${row('SIC',                 legs.map(_ => trip.sic||''), true)}
+        ${row('DEPT',                legs.map(l => `<b>${l.dept||''}</b>`))}
+        ${row('DEST',                legs.map(l => `<b>${l.dest||''}</b>`))}
+        ${row('DEPT Name',           legs.map(l => l.deptName||''))}
+        ${row('DEST Name',           legs.map(l => l.destName||''))}
+        ${row('ETD',                 legs.map(l => l.etd||''), true)}
+        ${row('ETA',                 legs.map(l => l.eta||''), true)}
+        ${row('ETE',                 legs.map(l => l.ete||''))}
+        ${row('NM',                  legs.map(l => l.nm||''))}
+        ${row('Est Burn',            legs.map(l => l.estBurn||''), true)}
+        ${row('Qty Purchased',       legs.map(l => l.qtyPurchased||''), true)}
+        <tr><td colspan="${nc+1}" class="pl-sec">Pilot Entries</td></tr>
+        ${row('OFF',                 legs.map(l => l.offTime||''), true)}
+        ${row('ON',                  legs.map(l => l.onTime||''), true)}
+        ${row('Pilot Flying',        legs.map(l => l.pilotFlying||''), true)}
+        ${row('FLT (min / tenths)',  legs.map(l => l.fltMinutes ? `${l.fltMinutes} / ${l.fltTenths}` : ''), true)}
+        ${row('Takeoff (D/N)',       legs.map(l => dn(l.takeoffType)))}
+        ${row('Landing (D/N)',       legs.map(l => dn(l.landingType)))}
+        ${row('PR Approach',         legs.map(l => l.prApproach||''), true)}
+        ${row('NP Approach',         legs.map(l => l.npApproach||''), true)}
+        ${row('NITE (min)',          legs.map(l => l.niteMin||''), true)}
+        ${row('INST (min)',          legs.map(l => l.instMin||''), true)}
+        <tr><td colspan="${nc+1}" class="pl-sec">Fuel</td></tr>
+        ${row('Fuel Out',            legs.map(l => l.fuelOut||''), true)}
+        ${row('Fuel In',             legs.map(l => l.fuelIn||''), true)}
+        ${row('Fuel Contam Checked', legs.map(l => [l.fuelContamDept?'DEPT ✓':'', l.fuelContamDest?'DEST ✓':''].filter(Boolean).join(' ')))}
+        <tr><td colspan="${nc+1}" class="pl-sec">FBO / Passengers</td></tr>
+        ${row('DEPT FBO',            legs.map(l => l.deptFBO||''))}
+        ${row('DEPT FBO Phone',      legs.map(l => l.deptFBOPhone||''))}
+        ${row('ARRV FBO',            legs.map(l => l.arrvFBO||''))}
+        ${row('ARRV FBO Phone',      legs.map(l => l.arrvFBOPhone||''))}
+        ${row('Passengers',          legs.map(l => (l.passengers||[]).map(p=>`${p.name} (${p.weight})`).join(', ')))}
+        ${row('PAX Count / Weight',  legs.map(l => {
+          const p=(l.passengers||[]);
+          return p.length?`${p.length} / ${p.reduce((s,x)=>s+(x.weight||0),0)} lbs`:'0 / 0';
+        }))}
+        ${row('PAX DEPT Trans',      legs.map(l => l.paxDeptTrans||''))}
+        ${row('PAX ARRV Trans',      legs.map(l => l.paxArrvTrans||''))}
+        ${row('Catering',            legs.map(l => l.catering||''))}
+      </tbody>
+    </table>
+
+    ${trip.notes ? `
+    <div class="pl-notes-box">
+      <div style="font-size:6pt;font-weight:bold;margin-bottom:2px">NOTES / LEG NOTES</div>
+      <div style="font-size:7.5pt">${trip.notes}</div>
+    </div>` : ''}
+
+    <div class="pl-footer">
+      FXV Trip Sheet &nbsp;·&nbsp; Trip ${trip.tripNumber||''} &nbsp;·&nbsp; ${trip.aircraft||''} &nbsp;·&nbsp; Exported ${now}
+      &nbsp;·&nbsp; (trip_sheet - FXV App)
+    </div>
+  `;
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target===o) o.classList.remove('open'); });
+});
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmtDate(ds) {
+  if (!ds) return '';
+  const d = new Date(ds + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'2-digit' });
+}
+
+function toast(msg, dur=2800) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.style.animation = 'fadeOut .2s ease forwards';
+    setTimeout(() => el.remove(), 220);
+  }, dur);
+}
+
+// ============================================================
+// START
+// ============================================================
+window.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
