@@ -1645,20 +1645,37 @@ async function parsePorsidePDF(file) {
   // ── Full text (reading order) for regex-based header extraction ──
   const fullText = items.slice().sort((a,b)=>a.y-b.y||a.x-b.x).map(i=>i.text).join(' ');
 
-  // ── HEADER: trip number, program ──
+  // ── HEADER: use position-based lookup (regex on sorted text fails
+  //    because trip number pixel-y is slightly above the "Trip:" label) ──
+
+  // Find label item, then grab items to its right on the same line (tol=4px)
+  const hdrItem = (labelText) =>
+    items.find(i => i.text === labelText) ||
+    items.find(i => i.text.startsWith(labelText.replace(':','')));
+
+  const hdrRow = (labelText, tol=4) => {
+    const lbl = hdrItem(labelText);
+    if (!lbl) return [];
+    return items.filter(i => Math.abs(i.y - lbl.y) <= tol && i.x > lbl.x)
+      .sort((a,b) => a.x - b.x);
+  };
+
   let tripNumber='', program='';
-  const tripM = fullText.match(/Trip\s*:?\s*(\d{4,6})\s*\/\s*(.*?)(?:\s+Aircraft|\s+Trip\s+Requester|$)/i);
-  if (tripM) { tripNumber=tripM[1].trim(); program=tripM[2].trim(); }
+  const tripRow = hdrRow('Trip:');
+  const numItem = tripRow.find(i => /^\d{4,6}$/.test(i.text));
+  if (numItem) {
+    tripNumber = numItem.text;
+    program = tripRow.filter(i => i.x > numItem.x && i.text !== '/')
+      .map(i => i.text).join(' ').trim();
+  }
 
-  // ── HEADER: aircraft ──
   let aircraft='';
-  const acM = fullText.match(/Aircraft\s*:?\s*([A-Z0-9]{4,6})/i);
-  if (acM) aircraft = acM[1];
+  const acRow = hdrRow('Aircraft:');
+  if (acRow.length) aircraft = acRow[0].text;
 
-  // ── HEADER: trip requester ──
   let tripRequester='';
-  const reqM = fullText.match(/Requester\s*:?\s*(.*?)(?:\s+PRINTED|\s+Page\s+\d|$)/i);
-  if (reqM) tripRequester = reqM[1].trim();
+  const reqRow = hdrRow('Requester:');
+  if (reqRow.length) tripRequester = reqRow.map(i=>i.text).join(' ').trim();
 
   // ── COLUMN DETECTION via LEG headers ──
   const legWords = items.filter(i => i.text === 'LEG');
