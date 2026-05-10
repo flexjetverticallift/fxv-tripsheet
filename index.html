@@ -673,6 +673,9 @@ const FB_CONFIG = {
   appId:             "1:547529347311:web:235ee751560dfebeb74b1a"
 };
 
+// Anthropic API key for PDF parsing
+const ANTHROPIC_API_KEY = 'sk-ant-api03-HpKMqgK1wwjTmoU1Uu201NRAq32yL2L3JgcZ0W7o3S-rVhc6qY-BnttPC_RrPmyIMsxr9kYgqWN2b5wPve8Xrg-XLuXGAAA';
+
 const PR_TYPES = ['', 'GBAS', 'ILS'];
 const NP_TYPES = ['', 'Circling', 'LNAV', 'LNAV+V', 'LNAV/VNAV', 'LDA', 'LOC', 'LP', 'LPV', 'NDB', 'VOR'];
 
@@ -1623,296 +1626,138 @@ async function handlePDFImport(event) {
 }
 
 async function parsePorsidePDF(file) {
-  const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
-  if (!pdfjsLib) throw new Error('PDF.js not loaded');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  // Convert PDF to base64
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
 
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  toast('Reading PDF with AI…');
 
-  // ── Collect all items across all pages ──
-  const allPageItems = [];
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const vp   = page.getViewport({ scale: 1 });
-    const tc   = await page.getTextContent();
-    tc.items.filter(i => i.str && i.str.trim()).forEach(i => {
-      allPageItems.push({ text: i.str.trim(), x: i.transform[4], y: vp.height - i.transform[5], page: p });
-    });
+  const prompt = `You are extracting data from a Flexjet Vertical Lift trip sheet PDF.
+Return ONLY a JSON object — no explanation, no markdown, no code fences.
+
+Extract these fields exactly:
+{
+  "tripNumber": "the number after Trip: at the top, e.g. 84387",
+  "program": "the program code after trip number, e.g. Part 135 / FRAL",
+  "aircraft": "tail number, e.g. N76FX",
+  "tripRequester": "full name after Trip Requester:",
+  "localDate": "ISO date YYYY-MM-DD from the LOCAL DATE row",
+  "pic": "PIC initials",
+  "sic": "SIC initials",
+  "notes": "all text from LEG NOTES section across all pages, preserve line breaks with \n",
+  "legs": [
+    {
+      "dept": "DEPT airport code",
+      "dest": "DEST airport code",
+      "deptName": "full departure airport name",
+      "destName": "full arrival airport name",
+      "deptLat": "departure latitude e.g. N40.51.00",
+      "deptLon": "departure longitude e.g. W74.03.65",
+      "destLat": "arrival latitude",
+      "destLon": "arrival longitude",
+      "etd": "ETD time as HH:MM",
+      "eta": "ETA time as HH:MM",
+      "ete": "ETE duration as HH:MM",
+      "nm": "nautical miles as number string",
+      "estBurn": "estimated fuel burn as number string",
+      "deptFBO": "DEPT FBO name",
+      "deptFBOPhone": "DEPT FBO phone number",
+      "deptFBOFax": "DEPT FBO fax number",
+      "deptFBOUnic": "DEPT FBO UNICOM frequency",
+      "deptFBOArinc": "DEPT FBO ARINC frequency",
+      "arrvFBO": "ARRV FBO name",
+      "arrvFBOPhone": "ARRV FBO phone number",
+      "arrvFBOFax": "ARRV FBO fax number",
+      "arrvFBOUnic": "ARRV FBO UNICOM frequency",
+      "arrvFBOArinc": "ARRV FBO ARINC frequency",
+      "passengers": [
+        {
+          "name": "Last, First",
+          "lead": true or false based on (L) designation,
+          "weight": weight as integer
+        }
+      ],
+      "paxDeptTrans": "PAX DEPT TRANS text",
+      "paxArrvTrans": "PAX ARRV TRANS text",
+      "catering": "catering info",
+      "legNotes": ""
+    }
+  ]
+}
+
+Rules:
+- Return ONLY the JSON, nothing else
+- Include ALL legs found in the document
+- Include ALL passengers listed per leg
+- If a field is missing or empty, use empty string "" or empty array []
+- Leg notes may span multiple pages — capture all of them
+- The date format in the PDF is like "Thu - 23 Apr 26" — convert to YYYY-MM-DD
+- DEPT FBO is the FBO at the departure airport, ARRV FBO is at the arrival airport
+- PHONE and FAX are on the same row (left=phone, right=fax), UNIC and ARINC are on the next row (left=UNIC, right=ARINC)`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-calls': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: base64 }
+          },
+          { type: 'text', text: prompt }
+        ]
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`API error ${response.status}: ${err}`);
   }
-  const items = allPageItems.filter(i => i.page === 1);
 
-  // ── Full text (reading order) for regex-based header extraction ──
-  const fullText = items.slice().sort((a,b)=>a.y-b.y||a.x-b.x).map(i=>i.text).join(' ');
+  const data = await response.json();
+  const raw = data.content?.[0]?.text || '';
 
-  // ── HEADER: pure coordinate-based extraction ──
-  // The Portside PDF header always has a fixed zone:
-  //   Trip number: 4-6 digit number at y < 45, x 200-400
-  //   Aircraft:    N-number at y 35-55
-  //   Requester:   names at y 49-58, x > 265
+  // Strip any accidental markdown fences
+  const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
 
-  let tripNumber='', program='';
-  // Trip number is always a 4-6 digit number near top-center of page
-  const tripNumItem = items.find(i => /^\d{4,6}$/.test(i.text) && i.y < 45 && i.x > 200 && i.x < 420);
-  if (tripNumItem) {
-    tripNumber = tripNumItem.text;
-    // Program: items to the right of the number on the same y line (±5px)
-    program = items
-      .filter(i => Math.abs(i.y - tripNumItem.y) < 5 && i.x > tripNumItem.x && i.text !== '/')
-      .sort((a,b) => a.x - b.x)
-      .map(i => i.text).join(' ').trim();
+  let parsed;
+  try {
+    parsed = JSON.parse(clean);
+  } catch(e) {
+    console.error('JSON parse failed. Raw response:', raw);
+    throw new Error('AI returned invalid JSON — see console');
   }
 
-  let aircraft='';
-  // Aircraft tail number: always matches N + digit + alphanums, at y 35-55
-  const acItem = items.find(i => /^N\d[A-Z0-9]{2,5}$/.test(i.text) && i.y > 35 && i.y < 55);
-  if (acItem) aircraft = acItem.text;
-
-  let tripRequester='';
-  // Requester text: items at y 49-58, x > 265 (right of label area)
-  // Exclude PRINTED date items which appear at y > 57
-  tripRequester = items
-    .filter(i => i.y > 49 && i.y < 58 && i.x > 265)
-    .sort((a,b) => a.x - b.x)
-    .map(i => i.text).join(' ').trim();
-
-  // ── COLUMN DETECTION via LEG headers ──
-  const legWords = items.filter(i => i.text === 'LEG');
-  const legHdrs = [];
-  for (const lw of legWords) {
-    const numI = items.find(i => Math.abs(i.y-lw.y)<6 && i.x>lw.x && i.x<lw.x+30 && /^\d$/.test(i.text));
-    if (numI) legHdrs.push({ num:parseInt(numI.text), x:lw.x });
-  }
-  legHdrs.sort((a,b)=>a.x-b.x);
-  const seen=new Set(), uLegs=[];
-  for (const h of legHdrs) { if(!seen.has(h.num)){seen.add(h.num);uLegs.push(h);} }
-  const numLegs = uLegs.length || 2;
-
-  // Column bounds: from LEG header midpoints
-  let colBounds = [];
-  if (uLegs.length >= 2) {
-    colBounds = uLegs.map((lh,i) => ({
-      start: i===0 ? 110 : (uLegs[i-1].x+lh.x)/2,
-      end:   i<uLegs.length-1 ? (lh.x+uLegs[i+1].x)/2 : 9999
-    }));
-  } else {
-    colBounds = [{start:110,end:256},{start:256,end:417},{start:417,end:9999}];
-  }
-  const safeNumLegs = Math.min(numLegs, colBounds.length);
-
-  const colOf = (idx) => {
-    if (!colBounds[idx]) return [];
-    return items.filter(i => i.x>=colBounds[idx].start && i.x<colBounds[idx].end);
+  // Ensure all leg fields exist
+  const legDefaults = {
+    dept:'', dest:'', deptName:'', destName:'',
+    deptLat:'', deptLon:'', destLat:'', destLon:'',
+    etd:'', eta:'', ete:'', nm:'', estBurn:'',
+    deptFBO:'', deptFBOPhone:'', deptFBOFax:'', deptFBOUnic:'', deptFBOArinc:'',
+    arrvFBO:'', arrvFBOPhone:'', arrvFBOFax:'', arrvFBOUnic:'', arrvFBOArinc:'',
+    passengers:[], paxDeptTrans:'', paxArrvTrans:'', catering:'', legNotes:'',
+    offTime:'', onTime:'', pilotFlying:'', fltMinutes:'', fltTenths:'',
+    takeoffType:'', landingType:'', prApproach:'', npApproach:'',
+    niteMin:'', instMin:'', fuelOut:'', fuelIn:'', qtyPurchased:'',
+    fuelContamDept:false, fuelContamDest:false,
   };
+  parsed.legs = (parsed.legs || []).map(l => ({ ...legDefaults, ...l }));
 
-  // Items at a specific y (tolerance), sorted by x
-  const atY = (col, y, tol=8) => col.filter(i=>Math.abs(i.y-y)<=tol).sort((a,b)=>a.x-b.x);
-
-  // Y of a label in the label column (x < 110)
-  const lY = (t) => {
-    const found = items.filter(i=>i.x<110&&i.text===t);
-    return found.length ? found[0].y : null;
-  };
-
-  // Reference Y positions
-  const yDate  = lY('DATE');
-  const yPIC   = lY('PIC');
-  const yDEPT  = items.filter(i=>i.x<110&&i.text==='DEPT').sort((a,b)=>a.y-b.y)[0]?.y;
-  const yETD   = lY('ETD');
-  const yETE   = lY('ETE');
-  const yBurn  = lY('Burn');
-
-  // Date string → ISO
-  const parseDate = (str) => {
-    const m = str.match(/(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*[-–]\s*(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2})/i);
-    if (!m) return '';
-    const mo={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}[m[3].toLowerCase()];
-    return `${2000+parseInt(m[4])}-${String(mo).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
-  };
-
-  let tripLocalDate='', tripPIC='', tripSIC='';
-
-  // ── LEG NOTES: look in label column row AND across all pages ──
-  let legNotes = '';
-  // Page 1 bottom: LEG NOTES label + notes text to the right
-  const legNotesLbl = items.find(i=>i.text==='NOTES' && items.some(j=>j.text==='LEG'&&Math.abs(j.y-i.y)<6&&j.x<i.x));
-  if (legNotesLbl) {
-    const skip = new Set(['LEG','NOTES','(trip_sheet','-','Rev.','10','Apr','2023)','Page','1','2','of','.']);
-    const noteItems = items.filter(i=>i.y>=legNotesLbl.y-5&&i.x>110&&!skip.has(i.text))
-      .sort((a,b)=>a.y-b.y||a.x-b.x);
-    const rows=[]; let cur=[],ly=null;
-    for (const it of noteItems) {
-      if (ly!==null&&Math.abs(it.y-ly)>10){if(cur.length)rows.push(cur.map(i=>i.text).join(' '));cur=[];}
-      cur.push(it);ly=it.y;
-    }
-    if(cur.length)rows.push(cur.map(i=>i.text).join(' '));
-    legNotes = rows.join('\n').trim();
-  }
-  // Page 2 notes (if not already found on page 1 with content)
-  if (!legNotes && pdf.numPages >= 2) {
-    try {
-      const p2items = allPageItems.filter(i=>i.page===2);
-      const nl2 = p2items.find(i=>i.text==='NOTES'&&p2items.some(j=>j.text==='LEG'&&Math.abs(j.y-i.y)<6&&j.x<i.x));
-      if (nl2) {
-        const skip2=new Set(['LEG','NOTES','(trip_sheet','-','Rev.','10','Apr','2023)','Page','1','2','of','.']);
-        const ni2=p2items.filter(i=>i.y>=nl2.y-5&&i.x>110&&!skip2.has(i.text)).sort((a,b)=>a.y-b.y||a.x-b.x);
-        const rows2=[]; let cur2=[],ly2=null;
-        for(const it of ni2){if(ly2!==null&&Math.abs(it.y-ly2)>10){if(cur2.length)rows2.push(cur2.map(i=>i.text).join(' '));cur2=[];}cur2.push(it);ly2=it.y;}
-        if(cur2.length)rows2.push(cur2.map(i=>i.text).join(' '));
-        legNotes=rows2.join('\n').trim();
-      }
-    } catch(e) { console.warn('P2 notes:',e); }
-  }
-
-  // ── GROUP ROWS within a column and y range ──
-  const groupRows = (col, yMin, yMax, tol=7) => {
-    const rows=[]; let cur=[],ly=null;
-    for (const it of col.filter(i=>i.y>=yMin&&i.y<=yMax).sort((a,b)=>a.y-b.y||a.x-b.x)) {
-      if(ly!==null&&Math.abs(it.y-ly)>tol){if(cur.length)rows.push(cur);cur=[];}
-      cur.push(it);ly=it.y;
-    }
-    if(cur.length)rows.push(cur);
-    return rows;
-  };
-
-  // Split a row of items into left/right halves within a column
-  const splitLR = (rowItems, colIdx) => {
-    const mid = (colBounds[colIdx].start + Math.min(colBounds[colIdx].end, colBounds[colIdx].start + 160)) / 2;
-    const left  = rowItems.filter(i=>i.x< mid).map(i=>i.text).join(' ');
-    const right = rowItems.filter(i=>i.x>=mid).map(i=>i.text).join(' ');
-    return [left.trim(), right.trim()];
-  };
-
-  const legs = [];
-
-  for (let li = 0; li < safeNumLegs; li++) {
-    const col = colOf(li);
-
-    // ── Date ──
-    let localDate='';
-    if(yDate) localDate=parseDate(atY(col,yDate,8).map(i=>i.text).join(' '));
-    if(li===0&&localDate) tripLocalDate=localDate;
-
-    // ── PIC / SIC ──
-    let pic='',sic='';
-    if(yPIC){const ps=atY(col,yPIC,6);pic=ps[0]?.text||'';sic=ps[1]?.text||'';}
-    if(li===0){tripPIC=pic;tripSIC=sic;}
-
-    // ── DEPT / DEST codes ──
-    let dept='',dest='';
-    if(yDEPT){const codes=atY(col,yDEPT,8);dept=codes[0]?.text||'';dest=codes[1]?.text||'';}
-
-    // ── Airport names (row just below DEPT/DEST codes) ──
-    let deptName='',destName='';
-    if(yDEPT){
-      const nameRow=col.filter(i=>i.y>yDEPT+2&&i.y<yDEPT+22).sort((a,b)=>a.x-b.x);
-      const mid=(colBounds[li].start+Math.min(colBounds[li].end,colBounds[li].start+170))/2;
-      deptName=nameRow.filter(i=>i.x<mid).map(i=>i.text).join(' ');
-      destName=nameRow.filter(i=>i.x>=mid).map(i=>i.text).join(' ');
-    }
-
-    // ── Coordinates (lat ~y152, lon ~y166 relative to PDF) ──
-    let deptLat='',destLat='',deptLon='',destLon='';
-    if(yDEPT){
-      const latRow=col.filter(i=>i.y>yDEPT+12&&i.y<yDEPT+28).sort((a,b)=>a.x-b.x);
-      const lonRow=col.filter(i=>i.y>yDEPT+26&&i.y<yDEPT+42).sort((a,b)=>a.x-b.x);
-      const mid2=(colBounds[li].start+Math.min(colBounds[li].end,colBounds[li].start+170))/2;
-      deptLat=latRow.filter(i=>i.x<mid2).map(i=>i.text).join('');
-      destLat=latRow.filter(i=>i.x>=mid2).map(i=>i.text).join('');
-      deptLon=lonRow.filter(i=>i.x<mid2).map(i=>i.text).join('');
-      destLon=lonRow.filter(i=>i.x>=mid2).map(i=>i.text).join('');
-    }
-
-    // ── ETD / ETA ──
-    let etd='',eta='';
-    if(yETD){const ts=atY(col,yETD,6);etd=ts[0]?.text||'';eta=ts[1]?.text||'';}
-
-    // ── ETE / NM ──
-    let ete='',nm='';
-    if(yETE){
-      const row=atY(col,yETE,8);
-      // ETE: first time-format item
-      const eteI=row.find(t=>/^\d{2}:\d{2}$/.test(t.text));
-      ete=eteI?.text||'';
-      // NM: number immediately before or after 'nm'
-      const nmIdx=row.findIndex(t=>t.text==='nm');
-      if(nmIdx>0) nm=row[nmIdx-1].text;
-      else {
-        const nmI=row.find(t=>/^\d+$/.test(t.text));
-        if(nmI) nm=nmI.text;
-      }
-    }
-
-    // ── Est Burn ──
-    let estBurn='';
-    if(yBurn){
-      const bv=atY(col,yBurn,10).find(t=>/^\d{2,4}$/.test(t.text));
-      estBurn=bv?.text||'';
-    }
-
-    // ── FBO SECTION ──
-    // DEPT FBO: y 428-470, ARRV FBO: y 475-520
-    const dFBORows = groupRows(col, 428, 472);
-    const aFBORows = groupRows(col, 473, 522);
-
-    // Row 0 = name, Row 1 = phone/fax, Row 2 = UNIC/ARINC
-    const deptFBO      = dFBORows[0]?.map(i=>i.text).join(' ')||'';
-    const dFBORow1     = dFBORows[1]||[];
-    const dFBORow2     = dFBORows[2]||[];
-    const [deptFBOPhone, deptFBOFax]   = splitLR(dFBORow1, li);
-    const [deptFBOUnic, deptFBOArinc]  = splitLR(dFBORow2, li);
-
-    const arrvFBO      = aFBORows[0]?.map(i=>i.text).join(' ')||'';
-    const aFBORow1     = aFBORows[1]||[];
-    const aFBORow2     = aFBORows[2]||[];
-    const [arrvFBOPhone, arrvFBOFax]   = splitLR(aFBORow1, li);
-    const [arrvFBOUnic, arrvFBOArinc]  = splitLR(aFBORow2, li);
-
-    // ── PASSENGERS ──
-    const passengers = [];
-    const paxRows = groupRows(col, 522, 625);
-    for (const row of paxRows) {
-      const pt = row.map(i=>i.text).join(' ');
-      // Match: "1. Last, First (L) (weight)" or "1. Last, First (weight)"
-      // The (L) means lead passenger — capture it
-      const pm = pt.match(/(?:\d+\.\s*)?([A-Za-z]+,\s*[A-Za-z]+(?:\s+[A-Za-z]+)?)\s*(\(L\))?\s*\((\d{2,4})\)/);
-      if (pm) {
-        passengers.push({
-          name:   pm[1].trim(),
-          lead:   !!pm[2],
-          weight: parseInt(pm[3])
-        });
-      }
-    }
-
-    // ── PAX transport ──
-    const yTransLabels = items.filter(i=>i.x<110&&i.text==='TRANS').sort((a,b)=>a.y-b.y);
-    const yPaxDept = yTransLabels[0]?.y;
-    const yPaxArrv = yTransLabels[1]?.y;
-    const paxDeptTrans = yPaxDept ? atY(col,yPaxDept,8).map(i=>i.text).join(' ') : '';
-    const paxArrvTrans = yPaxArrv ? atY(col,yPaxArrv,8).map(i=>i.text).join(' ') : '';
-
-    legs.push({
-      dept, dest, deptName, destName,
-      deptLat, deptLon, destLat, destLon,
-      etd, eta, ete, nm, estBurn,
-      deptFBO, deptFBOPhone, deptFBOFax, deptFBOUnic, deptFBOArinc,
-      arrvFBO, arrvFBOPhone, arrvFBOFax, arrvFBOUnic, arrvFBOArinc,
-      passengers, paxDeptTrans, paxArrvTrans, catering: '',
-      offTime:'', onTime:'', pilotFlying:'',
-      fltMinutes:'', fltTenths:'',
-      takeoffType:'', landingType:'',
-      prApproach:'', npApproach:'',
-      niteMin:'', instMin:'',
-      fuelOut:'', fuelIn:'', qtyPurchased:'',
-      fuelContamDept:false, fuelContamDest:false,
-      legNotes:'',
-    });
-  }
-
-  return { tripNumber, program, aircraft, tripRequester,
-           localDate: tripLocalDate, pic: tripPIC, sic: tripSIC,
-           notes: legNotes, legs };
+  return parsed;
 }
 
 
