@@ -433,6 +433,8 @@ input[type=checkbox]{
       <span class="sync" id="sd1"></span>
       <div id="user-badge" class="badge"></div>
       <button class="btn btn-ghost btn-sm" onclick="openSettings()">⚙</button>
+      <input type="file" id="pdf-import-input" accept=".pdf" style="display:none" onchange="handlePDFImport(event)">
+      <button class="btn btn-ghost btn-sm" id="btn-import" onclick="triggerImport()" style="display:none">↑ Import PDF</button>
       <button class="btn btn-ops btn-sm" id="btn-new" onclick="openNewTrip()" style="display:none">+ New Trip</button>
     </div>
   </div>
@@ -546,6 +548,37 @@ input[type=checkbox]{
 </div>
 
 <!-- ================================================
+     IMPORT REVIEW MODAL
+     ================================================ -->
+<div class="overlay" id="modal-import">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-title">📄 Import Trip Sheet — Review & Confirm</div>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px">Parsed from the Portside PDF. Review and correct any fields before creating the trip.</p>
+
+    <div class="g2 mb12">
+      <div class="fg"><label class="lbl">Trip Number</label><input type="text" id="ir-num"></div>
+      <div class="fg"><label class="lbl">Aircraft</label><input type="text" id="ir-ac" autocapitalize="characters"></div>
+    </div>
+    <div class="fg mb12"><label class="lbl">Trip Requester</label><input type="text" id="ir-req"></div>
+    <div class="g3 mb12">
+      <div class="fg"><label class="lbl">Local Date</label><input type="date" id="ir-date"></div>
+      <div class="fg"><label class="lbl">PIC</label><input type="text" id="ir-pic" autocapitalize="characters"></div>
+      <div class="fg"><label class="lbl">SIC</label><input type="text" id="ir-sic" autocapitalize="characters"></div>
+    </div>
+    <div class="fg mb12"><label class="lbl">Program / Auth</label><input type="text" id="ir-prog"></div>
+
+    <div id="ir-legs-wrap"></div>
+
+    <div class="fg mb12"><label class="lbl">Leg Notes (from page 2)</label><textarea id="ir-notes" style="min-height:60px;font-size:12px"></textarea></div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('modal-import')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmImport()">✓ Create Trip →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================
      PRINT LAYOUT (hidden)
      ================================================ -->
 <div id="print-layout"></div>
@@ -555,6 +588,7 @@ input[type=checkbox]{
      ================================================ -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <script>
 'use strict';
@@ -716,6 +750,8 @@ function updateUserUI() {
   if (sub) sub.textContent = currentUser.role === 'ops' ? 'Operations' : 'Pilot';
   const newBtn = document.getElementById('btn-new');
   if (newBtn) newBtn.style.display = currentUser.role === 'ops' ? '' : 'none';
+  const impBtn = document.getElementById('btn-import');
+  if (impBtn) impBtn.style.display = currentUser.role === 'ops' ? '' : 'none';
 }
 
 // ============================================================
@@ -1416,6 +1452,344 @@ function toast(msg, dur=2800) {
     el.style.animation = 'fadeOut .2s ease forwards';
     setTimeout(() => el.remove(), 220);
   }, dur);
+}
+
+// ============================================================
+// PDF IMPORT
+// ============================================================
+
+function triggerImport() {
+  document.getElementById('pdf-import-input').click();
+}
+
+async function handlePDFImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  toast('Parsing PDF…');
+  try {
+    const parsed = await parsePorsidePDF(file);
+    showImportReview(parsed);
+  } catch(e) {
+    console.error('PDF parse error:', e);
+    toast('Could not parse PDF — check console');
+  }
+}
+
+async function parsePorsidePDF(file) {
+  const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
+  if (!pdfjsLib) throw new Error('PDF.js not loaded');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  // ── Page 1: main data ──
+  const page1 = await pdf.getPage(1);
+  const vp1   = page1.getViewport({ scale: 1 });
+  const tc1   = await page1.getTextContent();
+  const items = tc1.items
+    .filter(i => i.str && i.str.trim())
+    .map(i => ({ text: i.str.trim(), x: i.transform[4], y: vp1.height - i.transform[5] }));
+
+  // ── Page 2: notes ──
+  let legNotes = '';
+  if (pdf.numPages >= 2) {
+    try {
+      const page2 = await pdf.getPage(2);
+      const vp2   = page2.getViewport({ scale: 1 });
+      const tc2   = await page2.getTextContent();
+      const p2 = tc2.items
+        .filter(i => i.str && i.str.trim())
+        .map(i => ({ text: i.str.trim(), x: i.transform[4], y: vp2.height - i.transform[5] }));
+      const notesLbl = p2.find(i => i.text === 'NOTES' && p2.some(j => j.text === 'LEG' && Math.abs(j.y - i.y) < 6));
+      if (notesLbl) {
+        const skip = new Set(['LEG','NOTES','(trip_sheet','-','Rev.','10','Apr','2023)','Page','1','2','of']);
+        const noteItems = p2.filter(i => i.y >= notesLbl.y - 5 && i.x > 110 && !skip.has(i.text))
+          .sort((a,b) => a.y - b.y || a.x - b.x);
+        const rows = []; let curRow = [], lastY = null;
+        for (const it of noteItems) {
+          if (lastY !== null && Math.abs(it.y - lastY) > 10) {
+            if (curRow.length) rows.push(curRow.map(i=>i.text).join(' '));
+            curRow = [];
+          }
+          curRow.push(it); lastY = it.y;
+        }
+        if (curRow.length) rows.push(curRow.map(i=>i.text).join(' '));
+        legNotes = rows.join('\n').trim();
+      }
+    } catch(e) { console.warn('Page 2:', e); }
+  }
+
+  // ── Header ──
+  let tripNumber = '', program = '', aircraft = '', tripRequester = '';
+
+  const tripLbl = items.find(i => i.text === 'Trip:');
+  if (tripLbl) {
+    const row = items.filter(i => Math.abs(i.y - tripLbl.y) < 5 && i.x > tripLbl.x).sort((a,b)=>a.x-b.x);
+    const numI = row.findIndex(v => /^\d{4,6}$/.test(v.text));
+    if (numI >= 0) {
+      tripNumber = row[numI].text;
+      program = row.slice(numI+1).filter(v=>v.text!=='/').map(v=>v.text).join(' ');
+    }
+  }
+  const acLbl = items.find(i => i.text === 'Aircraft:');
+  if (acLbl) {
+    const ac = items.filter(i => Math.abs(i.y-acLbl.y)<5 && i.x>acLbl.x).sort((a,b)=>a.x-b.x)[0];
+    aircraft = ac?.text || '';
+  }
+  const reqLbl = items.find(i => i.text === 'Requester:');
+  if (reqLbl) {
+    tripRequester = items.filter(i => Math.abs(i.y-reqLbl.y)<5 && i.x>reqLbl.x)
+      .sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ');
+  }
+
+  // ── Column detection via LEG headers ──
+  const legHdrs = [];
+  const legWords = items.filter(i => i.text === 'LEG');
+  for (const lw of legWords) {
+    const numI = items.find(i => Math.abs(i.y-lw.y)<5 && i.x>lw.x && /^\d$/.test(i.text));
+    if (numI) legHdrs.push({ num: parseInt(numI.text), x: lw.x, y: lw.y });
+  }
+  legHdrs.sort((a,b)=>a.x-b.x);
+  const seen = new Set(); const uLegs = [];
+  for (const h of legHdrs) { if (!seen.has(h.num)) { seen.add(h.num); uLegs.push(h); } }
+  const numLegs = uLegs.length || 2;
+
+  const colBounds = uLegs.map((lh, i) => ({
+    start: i === 0 ? 110 : (uLegs[i-1].x + lh.x)/2,
+    end:   i < uLegs.length-1 ? (lh.x + uLegs[i+1].x)/2 : 9999
+  }));
+
+  const colOf = (idx) => items.filter(i => i.x >= colBounds[idx].start && i.x < colBounds[idx].end);
+  const atY   = (col, y, tol=7) => col.filter(i=>Math.abs(i.y-y)<=tol).sort((a,b)=>a.x-b.x);
+
+  // ── Reference Y positions from label column (x<110) ──
+  const lY = (t) => items.find(i => i.x < 110 && i.text === t)?.y;
+  const yDate   = lY('DATE');
+  const yPIC    = lY('PIC');
+  const yDEPT   = items.filter(i=>i.x<110&&i.text==='DEPT').sort((a,b)=>a.y-b.y)[0]?.y;
+  const yETD    = lY('ETD');
+  const yETE    = lY('ETE');
+  const yBurn   = lY('Burn');
+
+  // ── Parse date string to ISO ──
+  const parseDate = (str) => {
+    const m = str.match(/(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*[-–]\s*(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2})/i);
+    if (!m) return '';
+    const mo = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}[m[3].toLowerCase()];
+    return `${2000+parseInt(m[4])}-${String(mo).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
+  };
+
+  let tripLocalDate = '', tripPIC = '', tripSIC = '';
+  const legs = [];
+
+  for (let li = 0; li < numLegs; li++) {
+    const col = colOf(li);
+
+    // Date
+    let localDate = '';
+    if (yDate) localDate = parseDate(atY(col,yDate,8).map(i=>i.text).join(' '));
+    if (li===0 && localDate) tripLocalDate = localDate;
+
+    // PIC / SIC
+    let pic='', sic='';
+    if (yPIC) {
+      const ps = atY(col,yPIC,6);
+      pic = ps[0]?.text||''; sic = ps[1]?.text||'';
+    }
+    if (li===0) { tripPIC=pic; tripSIC=sic; }
+
+    // DEPT / DEST codes
+    let dept='', dest='';
+    if (yDEPT) {
+      const codes = atY(col,yDEPT,8);
+      dept = codes[0]?.text||''; dest = codes[1]?.text||'';
+    }
+
+    // Airport full names (row immediately below DEPT/DEST)
+    let deptName='', destName='';
+    if (yDEPT) {
+      const nameRow = col.filter(i=>i.y>yDEPT+2&&i.y<yDEPT+22).sort((a,b)=>a.x-b.x);
+      const mid = (colBounds[li].start + colBounds[li].end) / 2;
+      deptName = nameRow.filter(i=>i.x<mid).map(i=>i.text).join(' ');
+      destName = nameRow.filter(i=>i.x>=mid).map(i=>i.text).join(' ');
+    }
+
+    // ETD / ETA
+    let etd='', eta='';
+    if (yETD) {
+      const ts = atY(col,yETD,6);
+      etd = ts[0]?.text||''; eta = ts[1]?.text||'';
+    }
+
+    // ETE / NM
+    let ete='', nm='';
+    if (yETE) {
+      const row = atY(col,yETE,6);
+      ete = row[0]?.text||'';
+      const ni = row.findIndex(t=>/^\d+$/.test(t.text));
+      if (ni>=0) nm = row[ni].text;
+    }
+
+    // Est Burn
+    let estBurn='';
+    if (yBurn) {
+      const bv = atY(col,yBurn,8).find(t=>/^\d{2,4}$/.test(t.text));
+      estBurn = bv?.text||'';
+    }
+
+    // FBO rows (y 430-470 for dept FBO, y 475-520 for arrv FBO)
+    const grpRows = (colArr, yMin, yMax) => {
+      const rs=[]; let cur=[],ly=null;
+      for (const it of colArr.filter(i=>i.y>=yMin&&i.y<=yMax).sort((a,b)=>a.y-b.y||a.x-b.x)) {
+        if (ly!==null&&Math.abs(it.y-ly)>7){if(cur.length)rs.push(cur.map(i=>i.text).join(' '));cur=[];}
+        cur.push(it);ly=it.y;
+      }
+      if(cur.length)rs.push(cur.map(i=>i.text).join(' '));
+      return rs;
+    };
+
+    const dFBORows = grpRows(col, 428, 470);
+    const aFBORows = grpRows(col, 475, 522);
+    const deptFBO      = dFBORows[0]||'';
+    const deptFBOPhone = dFBORows[1]||'';
+    const arrvFBO      = aFBORows[0]||'';
+    const arrvFBOPhone = aFBORows[1]||'';
+
+    // Passengers
+    const passengers = [];
+    const paxRow = col.filter(i=>i.y>=522&&i.y<=540).sort((a,b)=>a.x-b.x);
+    if (paxRow.length) {
+      const pt = paxRow.map(i=>i.text).join(' ');
+      const pm = pt.match(/(?:\d+\.\s*)?([A-Z][a-z]+,\s*[A-Z][a-z]+)\s*\((\d+)\)/);
+      if (pm) passengers.push({ name: pm[1], weight: parseInt(pm[2]) });
+    }
+
+    // PAX transport
+    const yPaxDept = items.filter(i=>i.x<110&&i.text==='TRANS').sort((a,b)=>a.y-b.y)[0]?.y;
+    const yPaxArrv = items.filter(i=>i.x<110&&i.text==='TRANS').sort((a,b)=>a.y-b.y)[1]?.y;
+    const paxDeptTrans = yPaxDept ? col.filter(i=>Math.abs(i.y-yPaxDept)<8).sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ') : '';
+    const paxArrvTrans = yPaxArrv ? col.filter(i=>Math.abs(i.y-yPaxArrv)<8).sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ') : '';
+
+    legs.push({
+      dept, dest, deptName, destName,
+      etd, eta, ete, nm, estBurn,
+      deptFBO, deptFBOPhone, arrvFBO, arrvFBOPhone,
+      passengers, paxDeptTrans, paxArrvTrans, catering: '',
+      offTime:'', onTime:'', pilotFlying:'',
+      fltMinutes:'', fltTenths:'',
+      takeoffType:'', landingType:'',
+      prApproach:'', npApproach:'',
+      niteMin:'', instMin:'',
+      fuelOut:'', fuelIn:'', qtyPurchased:'',
+      fuelContamDept:false, fuelContamDest:false,
+    });
+  }
+
+  return { tripNumber, program, aircraft, tripRequester,
+           localDate: tripLocalDate, pic: tripPIC, sic: tripSIC,
+           notes: legNotes, legs };
+}
+
+// ── Review modal ──────────────────────────────────────────────────────────
+let importedData = null;
+
+function showImportReview(parsed) {
+  importedData = parsed;
+
+  document.getElementById('ir-num').value  = parsed.tripNumber||'';
+  document.getElementById('ir-ac').value   = parsed.aircraft||'';
+  document.getElementById('ir-req').value  = parsed.tripRequester||'';
+  document.getElementById('ir-date').value = parsed.localDate||'';
+  document.getElementById('ir-pic').value  = parsed.pic||'';
+  document.getElementById('ir-sic').value  = parsed.sic||'';
+  document.getElementById('ir-prog').value = parsed.program||'';
+  document.getElementById('ir-notes').value= parsed.notes||'';
+
+  const wrap = document.getElementById('ir-legs-wrap');
+  wrap.innerHTML = (parsed.legs||[]).map((leg, i) => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-dim);margin-bottom:8px">LEG ${i+1}</div>
+      <div class="g4" style="margin-bottom:8px">
+        <div class="fg"><label class="lbl">DEPT</label><input type="text" id="ir-l${i}-dept" class="inp-sm" value="${esc(leg.dept)}" autocapitalize="characters"></div>
+        <div class="fg"><label class="lbl">DEST</label><input type="text" id="ir-l${i}-dest" class="inp-sm" value="${esc(leg.dest)}" autocapitalize="characters"></div>
+        <div class="fg"><label class="lbl">ETD</label><input type="text" id="ir-l${i}-etd" class="inp-sm" value="${esc(leg.etd)}"></div>
+        <div class="fg"><label class="lbl">ETA</label><input type="text" id="ir-l${i}-eta" class="inp-sm" value="${esc(leg.eta)}"></div>
+      </div>
+      <div class="g4" style="margin-bottom:8px">
+        <div class="fg"><label class="lbl">DEPT Name</label><input type="text" id="ir-l${i}-dname" class="inp-sm" value="${esc(leg.deptName)}"></div>
+        <div class="fg"><label class="lbl">DEST Name</label><input type="text" id="ir-l${i}-aname" class="inp-sm" value="${esc(leg.destName)}"></div>
+        <div class="fg"><label class="lbl">ETE</label><input type="text" id="ir-l${i}-ete" class="inp-sm" value="${esc(leg.ete)}"></div>
+        <div class="fg"><label class="lbl">NM</label><input type="text" id="ir-l${i}-nm" class="inp-sm" value="${esc(leg.nm)}"></div>
+      </div>
+      <div class="g4" style="margin-bottom:8px">
+        <div class="fg"><label class="lbl">Est Burn</label><input type="text" id="ir-l${i}-burn" class="inp-sm" value="${esc(leg.estBurn)}"></div>
+        <div class="fg"><label class="lbl">DEPT FBO</label><input type="text" id="ir-l${i}-dfbo" class="inp-sm" value="${esc(leg.deptFBO)}"></div>
+        <div class="fg"><label class="lbl">DEPT FBO Phone</label><input type="text" id="ir-l${i}-dfph" class="inp-sm" value="${esc(leg.deptFBOPhone)}"></div>
+        <div class="fg"><label class="lbl">ARRV FBO</label><input type="text" id="ir-l${i}-afbo" class="inp-sm" value="${esc(leg.arrvFBO)}"></div>
+      </div>
+      <div class="g2" style="margin-bottom:8px">
+        <div class="fg"><label class="lbl">ARRV FBO Phone</label><input type="text" id="ir-l${i}-afph" class="inp-sm" value="${esc(leg.arrvFBOPhone)}"></div>
+        <div class="fg"><label class="lbl">Passengers</label><input type="text" id="ir-l${i}-pax" class="inp-sm" value="${esc((leg.passengers||[]).map(p=>p.name+', '+p.weight).join('; '))}"></div>
+      </div>
+    </div>
+  `).join('');
+
+  openModal('modal-import');
+}
+
+async function confirmImport() {
+  if (!importedData) return;
+
+  // Read back any edits from the review form
+  const legs = (importedData.legs||[]).map((leg, i) => {
+    const paxRaw = document.getElementById(`ir-l${i}-pax`)?.value||'';
+    const passengers = paxRaw ? paxRaw.split(';').filter(Boolean).map(p => {
+      const parts = p.trim().split(',');
+      return { name: parts.slice(0,parts.length-1).join(',').trim(), weight: parseInt(parts[parts.length-1])||0 };
+    }) : leg.passengers||[];
+
+    return {
+      ...leg,
+      dept:         (document.getElementById(`ir-l${i}-dept`)?.value||'').toUpperCase(),
+      dest:         (document.getElementById(`ir-l${i}-dest`)?.value||'').toUpperCase(),
+      deptName:     document.getElementById(`ir-l${i}-dname`)?.value||'',
+      destName:     document.getElementById(`ir-l${i}-aname`)?.value||'',
+      etd:          document.getElementById(`ir-l${i}-etd`)?.value||'',
+      eta:          document.getElementById(`ir-l${i}-eta`)?.value||'',
+      ete:          document.getElementById(`ir-l${i}-ete`)?.value||'',
+      nm:           document.getElementById(`ir-l${i}-nm`)?.value||'',
+      estBurn:      document.getElementById(`ir-l${i}-burn`)?.value||'',
+      deptFBO:      document.getElementById(`ir-l${i}-dfbo`)?.value||'',
+      deptFBOPhone: document.getElementById(`ir-l${i}-dfph`)?.value||'',
+      arrvFBO:      document.getElementById(`ir-l${i}-afbo`)?.value||'',
+      arrvFBOPhone: document.getElementById(`ir-l${i}-afph`)?.value||'',
+      passengers,
+    };
+  });
+
+  try {
+    const ref = await db.collection('trips').add({
+      tripNumber:    document.getElementById('ir-num').value.trim(),
+      aircraft:      document.getElementById('ir-ac').value.trim().toUpperCase(),
+      tripRequester: document.getElementById('ir-req').value.trim(),
+      localDate:     document.getElementById('ir-date').value,
+      program:       document.getElementById('ir-prog').value.trim(),
+      pic:           document.getElementById('ir-pic').value.trim().toUpperCase(),
+      sic:           document.getElementById('ir-sic').value.trim().toUpperCase(),
+      legs, notes:   document.getElementById('ir-notes').value.trim(),
+      status: 'active', createdBy: currentUser.name,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    closeModal('modal-import');
+    importedData = null;
+    toast('Trip imported successfully');
+    openTrip(ref.id);
+  } catch(e) {
+    toast('Error saving trip: ' + e.message);
+    console.error(e);
+  }
 }
 
 // ============================================================
