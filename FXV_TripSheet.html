@@ -350,8 +350,87 @@ input[type=checkbox]{
 .mb12{margin-bottom:12px}
 
 /* ================================================
-   PRINT LAYOUT
+   TRIP TABLE
    ================================================ */
+.trip-table{width:100%;border-collapse:collapse;table-layout:auto}
+.trip-table td,.trip-table th{border:.5px solid var(--border);vertical-align:middle}
+.tt-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:6px}
+.tt-lbl{
+  background:var(--surface2);font-size:8px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);
+  padding:4px 5px;position:sticky;left:0;z-index:2;
+  white-space:nowrap;min-width:76px;width:76px;
+}
+.tt-lbl-split{display:flex;flex-direction:column;gap:1px}
+.tt-lbl-t{color:var(--text-dim);font-size:8px}
+.tt-lbl-b{color:var(--text-muted);font-size:7px}
+.tt-hdr{
+  background:var(--surface);text-align:center;
+  padding:6px 8px;border-bottom:2px solid var(--accent);min-width:200px;
+}
+.tt-leg-num{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.05em}
+.tt-leg-route{font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace}
+.tt-cell{padding:3px 5px;background:var(--bg2);min-width:200px}
+.tt-cell-fbo{background:var(--surface)}
+.tt-lbl-fbo{background:var(--surface2);color:var(--amber) !important}
+.tt-lbl-pax{background:var(--surface2);color:var(--green) !important;vertical-align:top;padding-top:6px}
+.tt-sec{
+  background:var(--surface2);font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);
+  padding:5px 8px;border-top:1px solid var(--border2);
+  position:sticky;left:0;
+}
+
+/* Inline field inputs */
+.tf{
+  width:100%;background:transparent;border:none;color:var(--text);
+  font-family:'DM Mono',monospace;font-size:12px;
+  padding:3px 4px;border-radius:3px;outline:none;min-width:0;
+}
+.tf.sans{font-family:'DM Sans',sans-serif}
+.tf:not(:disabled):hover,.tf:focus{background:rgba(79,142,247,.08);box-shadow:0 0 0 1px var(--accent)}
+.tf:disabled{color:var(--text-dim);cursor:default}
+.tf-pair{display:flex;gap:3px;align-items:center}
+.tf-pair .tf{flex:1;min-width:0}
+.tf-narrow{max-width:52px !important}
+.tf-tenths{
+  font-family:'DM Mono',monospace;font-size:15px;font-weight:600;
+  color:var(--accent);white-space:nowrap;min-width:30px;text-align:center;
+}
+.tf-ro{font-size:12px;color:var(--text-dim);padding:3px 4px;display:block;font-family:'DM Mono',monospace}
+.tf-chk-row{display:flex;gap:10px;padding:3px 4px}
+.tf-chk{display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;color:var(--text-dim)}
+.tf-sel{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  font-size:10px;padding:2px 4px;border-radius:3px;font-family:inherit;max-width:72px;
+}
+.tf-sel:disabled{opacity:.5}
+.tf-notes{min-height:44px;resize:vertical;font-size:11px;font-family:'DM Sans',sans-serif}
+
+/* D/N inline toggle */
+.dn-mini{display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;user-select:none;min-width:32px}
+.dn-lbl{font-size:7px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:.05em}
+.dn-val{
+  font-size:13px;font-weight:700;color:var(--text-muted);
+  padding:1px 5px;border-radius:3px;min-width:24px;text-align:center;
+  border:1px solid var(--border);
+}
+.dn-val.dn-day{background:var(--amber);color:#000;border-color:var(--amber)}
+.dn-val.dn-night{background:#1a2a45;color:#60a5fa;border-color:#1a2a45}
+.dn-mini.disabled{cursor:default;opacity:.5}
+
+/* Passenger list */
+.pax-cell{display:flex;flex-direction:column;gap:3px}
+.pax-row{display:flex;align-items:center;gap:3px}
+.tf-pax-name{flex:1;font-size:11px;font-family:'DM Sans',sans-serif}
+.tf-pax-wt{width:46px !important;font-size:11px}
+.pax-lead{font-size:8px;font-weight:700;color:var(--amber);white-space:nowrap;padding:0 2px}
+.pax-del{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;padding:0 2px;line-height:1}
+.pax-del:hover{color:var(--red)}
+.pax-total{font-size:10px;color:var(--text-dim);padding:3px 4px;border-top:1px solid var(--border);margin-top:2px}
+
+/* ================================================
+   PRINT LAYOUT
 @media print{
   body > *:not(#print-layout){display:none !important}
   #print-layout{display:block !important}
@@ -464,36 +543,23 @@ input[type=checkbox]{
       <button class="btn btn-ghost btn-sm" onclick="exportPDF()">↓ PDF</button>
     </div>
   </div>
-  <div class="page">
-    <!-- Info strip -->
-    <div class="card" style="padding:11px 14px;margin-bottom:10px">
-      <div class="g3">
-        <div><div class="lbl">Aircraft</div><div id="td-aircraft" style="font-family:'DM Mono',monospace;font-weight:600;font-size:14px"></div></div>
+  <div class="page" style="padding:8px;max-width:100%">
+    <!-- Strip -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+      <div style="display:flex;gap:14px;align-items:baseline;flex-wrap:wrap">
+        <div><div class="lbl">Aircraft</div><div id="td-aircraft" style="font-family:'DM Mono',monospace;font-weight:700;font-size:15px"></div></div>
         <div><div class="lbl">Date</div><div id="td-date" style="font-weight:600;font-size:13px"></div></div>
-        <div><div class="lbl">Trip Requester</div><div id="td-req" style="font-size:12px;color:var(--text-dim)"></div></div>
+        <div><div class="lbl">Requester</div><div id="td-req" style="font-size:12px;color:var(--text-dim)"></div></div>
+        <span class="badge" id="trip-status-badge"></span>
+      </div>
+      <div id="ops-ctrl" style="display:none;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="addLegToTrip()">+ Leg</button>
+        <button class="btn btn-green btn-sm" onclick="markTripComplete()">✓ Complete</button>
+        <button class="btn btn-red btn-sm" onclick="deleteTripConfirm()">Delete</button>
       </div>
     </div>
-
-    <!-- Leg tabs -->
-    <div class="leg-tabs" id="leg-tabs"></div>
-
-    <!-- Leg panels (dynamically rendered) -->
-    <div id="leg-panels"></div>
-
-    <!-- Notes -->
-    <div class="card" style="margin-top:10px">
-      <div class="card-title">✏ Trip Notes</div>
-      <textarea id="trip-notes" placeholder="Any notes for this trip…" oninput="debounceSave('notes', this.value)"></textarea>
-    </div>
-
-    <!-- Ops controls -->
-    <div id="ops-ctrl" style="display:none;margin-top:10px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" onclick="addLegToTrip()">+ Add Leg</button>
-        <button class="btn btn-green btn-sm" onclick="markTripComplete()">✓ Mark Complete</button>
-        <button class="btn btn-red btn-sm" onclick="deleteTripConfirm()">Delete Trip</button>
-      </div>
-    </div>
+    <!-- Trip table -->
+    <div class="tt-wrap" id="trip-table-wrap"></div>
   </div>
 </div>
 
@@ -886,10 +952,12 @@ async function createTrip() {
       ete: gv(`ntl${n}-ete`), nm: gv(`ntl${n}-nm`),
       estBurn: gv(`ntl${n}-burn`),
       deptFBO: gv(`ntl${n}-dfbo`), deptFBOPhone: gv(`ntl${n}-dfboph`),
+      deptFBOFax:'', deptFBOUnic:'', deptFBOArinc:'',
       arrvFBO: gv(`ntl${n}-afbo`), arrvFBOPhone: gv(`ntl${n}-afboph`),
+      arrvFBOFax:'', arrvFBOUnic:'', arrvFBOArinc:'',
       passengers, paxDeptTrans: gv(`ntl${n}-ptrans`),
       paxArrvTrans: gv(`ntl${n}-atrans`), catering: gv(`ntl${n}-cat`),
-      // pilot fields
+      legNotes:'', deptLat:'', deptLon:'', destLat:'', destLon:'',
       offTime:'', onTime:'', pilotFlying:'',
       fltMinutes:'', fltTenths:'',
       takeoffType:'', landingType:'',
@@ -938,273 +1006,267 @@ function goBack() {
 }
 
 // ============================================================
-// RENDER TRIP DETAIL
+// RENDER TRIP DETAIL — table-based columnar view
 // ============================================================
-function renderTrip(trip, prevTrip) {
+let _pendingTrip = null;
+
+function renderTrip(trip) {
   document.getElementById('td-trip-title').textContent = `Trip ${trip.tripNumber}`;
   document.getElementById('td-trip-sub').textContent   = `${trip.aircraft} · ${trip.program||''}`;
   document.getElementById('td-aircraft').textContent   = trip.aircraft;
   document.getElementById('td-date').textContent       = fmtDate(trip.localDate);
   document.getElementById('td-req').textContent        = trip.tripRequester;
+  const sb = document.getElementById('trip-status-badge');
+  if (sb) { sb.textContent = trip.status||'active'; sb.className = 'badge badge-' + (trip.status==='completed'?'complete':'active'); }
+  document.getElementById('ops-ctrl').style.display = currentUser.role === 'ops' ? 'flex' : 'none';
 
-  // Notes — only update if not focused
-  const notesEl = document.getElementById('trip-notes');
-  if (notesEl && document.activeElement !== notesEl) notesEl.value = trip.notes || '';
+  // Don't rebuild while user is typing — queue it
+  const focused = document.activeElement;
+  const inTable = focused && document.getElementById('trip-table-wrap')?.contains(focused);
+  if (inTable) { _pendingTrip = trip; return; }
+  _pendingTrip = null;
+  buildAndInsertTable(trip);
+}
 
-  // Ops controls
-  document.getElementById('ops-ctrl').style.display = currentUser.role === 'ops' ? 'block' : 'none';
+document.addEventListener('blur', () => {
+  if (_pendingTrip) {
+    const t = _pendingTrip; _pendingTrip = null;
+    buildAndInsertTable(t);
+  }
+}, true);
 
+function buildAndInsertTable(trip) {
+  const wrap = document.getElementById('trip-table-wrap');
+  if (!wrap) return;
+  const scrollLeft = wrap.scrollLeft;
+  wrap.innerHTML = buildTripTable(trip);
+  wrap.scrollLeft = scrollLeft;
+}
+
+// ── can this role edit this field? ──
+function canEdit(field) {
+  if (currentUser.role === 'ops') return true;
+  return new Set([
+    'fuelOut','fuelIn','qtyPurchased',
+    'offTime','onTime','pilotFlying','fltMinutes',
+    'niteMin','instMin','takeoffType','landingType',
+    'prApproach','npApproach','dept','dest',
+    'fuelContamDept','fuelContamDest','legNotes','passengers'
+  ]).has(field);
+}
+
+// ── Build the full trip table ──
+function buildTripTable(trip) {
   const legs = trip.legs || [];
+  const n = legs.length;
 
-  // Re-render tabs always
-  renderLegTabs(legs);
+  // ── helpers ──
+  const e = esc;
 
-  // Check if we need full panel rebuild (leg count changed) or smart update
-  const panelsEl = document.getElementById('leg-panels');
-  const panelCount = panelsEl.querySelectorAll('.leg-panel').length;
-  if (panelCount !== legs.length) {
-    // Full rebuild
-    panelsEl.innerHTML = legs.map((leg, i) => buildLegPanel(leg, i, trip)).join('');
-  } else {
-    // Smart update — don't touch focused inputs
-    legs.forEach((leg, i) => smartUpdateLeg(leg, i, trip));
-  }
+  const tf = (li, field, val, opts={}) => {
+    const ed = canEdit(field);
+    const mono = opts.mono !== false;
+    const type = opts.type || 'text';
+    const ph   = opts.ph || '';
+    const ml   = opts.ml ? `maxlength="${opts.ml}"` : '';
+    const ac   = opts.ac ? `autocapitalize="${opts.ac}"` : '';
+    const extra = opts.extra || '';
+    if (!ed) return `<span class="tf-ro">${e(val)||'—'}</span>`;
+    return `<input type="${type}" class="tf${mono?'':' sans'}" value="${e(val)}" placeholder="${ph}" ${ml} ${ac} ${extra}
+      oninput="handleFieldInput(${li},'${field}',this)" data-leg="${li}" data-field="${field}">`;
+  };
 
-  // Show active panel
-  panelsEl.querySelectorAll('.leg-panel').forEach((p, i) => {
-    p.style.display = i === currentLeg ? 'block' : 'none';
-  });
-}
+  const tfPair = (li, f1, v1, f2, v2, opts={}) =>
+    `<div class="tf-pair">${tf(li,f1,v1,{...opts,ph:opts.p1||''})}&nbsp;${tf(li,f2,v2,{...opts,ph:opts.p2||''})}</div>`;
 
-function renderLegTabs(legs) {
-  const tabsEl = document.getElementById('leg-tabs');
-  tabsEl.innerHTML = legs.map((l, i) => {
-    const done = l.offTime && l.onTime && l.pilotFlying;
-    return `<div class="leg-tab ${i===currentLeg?'active':done?'done':''}" onclick="switchLeg(${i})">
-      LEG ${i+1}
-      <span class="leg-tab-route">${l.dept||'?'}→${l.dest||'?'}</span>
+  const dn = (li, field, val, label) => {
+    const ed = canEdit(field);
+    return `<div class="dn-mini${ed?'':' disabled'}" ${ed?`onclick="handleDN(${li},'${field}',this)"`:''}>
+      <span class="dn-lbl">${label}</span>
+      <span class="dn-val ${val==='D'?'dn-day':val==='N'?'dn-night':''}" data-val="${val||''}">${val||'—'}</span>
     </div>`;
-  }).join('');
-}
-
-function switchLeg(i) {
-  currentLeg = i;
-  document.querySelectorAll('.leg-tab').forEach((t, idx) => {
-    const legs = currentTrip?.legs || [];
-    const done = legs[idx]?.offTime && legs[idx]?.onTime && legs[idx]?.pilotFlying;
-    t.className = `leg-tab ${idx===i?'active':done?'done':''}`;
-  });
-  document.querySelectorAll('.leg-panel').forEach((p, idx) => {
-    p.style.display = idx === i ? 'block' : 'none';
-  });
-}
-
-// ============================================================
-// BUILD LEG PANEL HTML
-// ============================================================
-function buildLegPanel(leg, i, trip) {
-  const isOps = currentUser.role === 'ops';
-  const pax    = leg.passengers || [];
-  const paxTot = pax.reduce((s, p) => s + (p.weight||0), 0);
-  const paxStr = pax.length ? pax.map(p => `${p.name} (${p.weight} lbs)`).join(', ') : '—';
-
-  const selPR = (v) => PR_TYPES.map(t => `<option value="${t}" ${leg.prApproach===t?'selected':''}>${t||'—'}</option>`).join('');
-  const selNP = (v) => NP_TYPES.map(t => `<option value="${t}" ${leg.npApproach===t?'selected':''}>${t||'—'}</option>`).join('');
-
-  return `
-  <div class="card leg-panel" id="lp-${i}" style="display:none">
-
-    <div class="sec sec-ops">Operations Pre-Fill</div>
-    <div class="g2 mb8">
-      ${isOps
-        ? `<div class="fg"><label class="lbl">DEPT</label><input type="text" class="inp-sm" value="${esc(leg.dept)}" onchange="updateLegF(${i},'dept',this.value.toUpperCase())" autocapitalize="characters"></div>
-           <div class="fg"><label class="lbl">DEST</label><input type="text" class="inp-sm" value="${esc(leg.dest)}" onchange="updateLegF(${i},'dest',this.value.toUpperCase())" autocapitalize="characters"></div>`
-        : `<div><label class="lbl">DEPT</label><div class="ro mono" style="font-weight:700;font-size:15px">${leg.dept||'—'}</div></div>
-           <div><label class="lbl">DEST</label><div class="ro mono" style="font-weight:700;font-size:15px">${leg.dest||'—'}</div></div>`}
-    </div>
-    <div class="g4 mb8">
-      <div><label class="lbl">ETD</label><div class="ro">${leg.etd||'—'}</div></div>
-      <div><label class="lbl">ETA</label><div class="ro">${leg.eta||'—'}</div></div>
-      <div><label class="lbl">ETE</label><div class="ro">${leg.ete||'—'}</div></div>
-      <div><label class="lbl">NM</label><div class="ro">${leg.nm||'—'}</div></div>
-    </div>
-    <div class="g2 mb8">
-      <div><label class="lbl">Est Burn</label><div class="ro">${leg.estBurn||'—'}</div></div>
-      <div><label class="lbl">PIC / SIC</label><div class="ro">${trip.pic||'—'} / ${trip.sic||'—'}</div></div>
-    </div>
-    <div class="g2 mb8">
-      <div><label class="lbl">DEPT FBO</label><div class="ro" style="font-size:12px">${leg.deptFBO||'—'}${leg.deptFBOPhone?' · '+leg.deptFBOPhone:''}</div></div>
-      <div><label class="lbl">ARRV FBO</label><div class="ro" style="font-size:12px">${leg.arrvFBO||'—'}${leg.arrvFBOPhone?' · '+leg.arrvFBOPhone:''}</div></div>
-    </div>
-    <div class="mb8">
-      <label class="lbl">Passengers</label>
-      <div class="ro" style="font-size:12px">${paxStr} ${paxTot>0?`<span style="color:var(--text-muted)">(Total: ${paxTot} lbs)</span>`:''}</div>
-    </div>
-
-    <!-- ── PILOT FIELDS ── -->
-    <div class="sec sec-pilot">Pilot Entry</div>
-
-    <div class="g2 mb8" id="lp-${i}-times">
-      <div class="fg"><label class="lbl">OFF (Block Out)</label>
-        <input type="text" id="lp-${i}-off" class="inp-sm" maxlength="4" value="${esc(leg.offTime)}"
-          placeholder="1153" oninput="updateLegF(${i},'offTime',this.value)">
-      </div>
-      <div class="fg"><label class="lbl">ON (Block In)</label>
-        <input type="text" id="lp-${i}-on" class="inp-sm" maxlength="4" value="${esc(leg.onTime)}"
-          placeholder="1207" oninput="updateLegF(${i},'onTime',this.value)">
-      </div>
-    </div>
-
-    <div class="g2 mb8">
-      <div class="fg"><label class="lbl">Pilot Flying</label>
-        <input type="text" id="lp-${i}-pf" class="inp-sm" maxlength="6" value="${esc(leg.pilotFlying)}"
-          placeholder="${trip.pic||'Initials'}" autocapitalize="characters"
-          oninput="updateLegF(${i},'pilotFlying',this.value.toUpperCase())">
-      </div>
-      <div class="fg"><label class="lbl">FLT Minutes</label>
-        <input type="number" id="lp-${i}-fltm" class="inp-sm" min="0" max="600" value="${esc(leg.fltMinutes)}"
-          placeholder="36" oninput="onFltMinutes(${i},this.value)">
-      </div>
-    </div>
-
-    <div class="mb8">
-      <label class="lbl">FLT Time (Tenths) — auto</label>
-      <div class="tenths-box" id="lp-${i}-tenths">${leg.fltTenths||'—'}</div>
-    </div>
-
-    <div class="g2 mb8">
-      <div>
-        <label class="lbl">Takeoff</label>
-        <div class="dn-wrap">
-          <button class="dn-btn ${leg.takeoffType==='D'?'day':''}" onclick="setDN(${i},'takeoffType','D')">D</button>
-          <button class="dn-btn ${leg.takeoffType==='N'?'night':''}" onclick="setDN(${i},'takeoffType','N')">N</button>
-          <button class="dn-btn clear-btn" onclick="setDN(${i},'takeoffType','')">✕</button>
-        </div>
-      </div>
-      <div>
-        <label class="lbl">Landing</label>
-        <div class="dn-wrap">
-          <button class="dn-btn ${leg.landingType==='D'?'day':''}" onclick="setDN(${i},'landingType','D')">D</button>
-          <button class="dn-btn ${leg.landingType==='N'?'night':''}" onclick="setDN(${i},'landingType','N')">N</button>
-          <button class="dn-btn clear-btn" onclick="setDN(${i},'landingType','')">✕</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="g2 mb8">
-      <div class="fg"><label class="lbl">PR Approach</label>
-        <select id="lp-${i}-pr" class="inp-sm" onchange="updateLegF(${i},'prApproach',this.value)">${selPR()}</select>
-      </div>
-      <div class="fg"><label class="lbl">NP Approach</label>
-        <select id="lp-${i}-np" class="inp-sm" onchange="updateLegF(${i},'npApproach',this.value)">${selNP()}</select>
-      </div>
-    </div>
-
-    <div class="g2 mb8">
-      <div class="fg"><label class="lbl">NITE (min)</label>
-        <input type="number" id="lp-${i}-nite" class="inp-sm" min="0" value="${esc(leg.niteMin)}"
-          placeholder="0" oninput="updateLegF(${i},'niteMin',this.value)">
-      </div>
-      <div class="fg"><label class="lbl">INST (min)</label>
-        <input type="number" id="lp-${i}-inst" class="inp-sm" min="0" value="${esc(leg.instMin)}"
-          placeholder="0" oninput="updateLegF(${i},'instMin',this.value)">
-      </div>
-    </div>
-
-    <div class="sec sec-fuel">Fuel</div>
-
-    <div class="g3 mb8">
-      <div class="fg"><label class="lbl">Fuel Out</label>
-        <input type="text" id="lp-${i}-fout" class="inp-sm" value="${esc(leg.fuelOut)}"
-          placeholder="lbs" oninput="updateLegF(${i},'fuelOut',this.value)">
-      </div>
-      <div class="fg"><label class="lbl">Fuel In</label>
-        <input type="text" id="lp-${i}-fin" class="inp-sm" value="${esc(leg.fuelIn)}"
-          placeholder="lbs" oninput="updateLegF(${i},'fuelIn',this.value)">
-      </div>
-      <div class="fg"><label class="lbl">Qty Purchased</label>
-        <input type="text" id="lp-${i}-qty" class="inp-sm" value="${esc(leg.qtyPurchased)}"
-          placeholder="gal" oninput="updateLegF(${i},'qtyPurchased',this.value)">
-      </div>
-    </div>
-
-    <div class="mb8">
-      <label class="lbl" style="margin-bottom:6px">Fuel Contamination Checked</label>
-      <div style="display:flex;gap:16px">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="checkbox" id="lp-${i}-fcd" ${leg.fuelContamDept?'checked':''}
-            onchange="updateLegF(${i},'fuelContamDept',this.checked)"> DEPT
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="checkbox" id="lp-${i}-fca" ${leg.fuelContamDest?'checked':''}
-            onchange="updateLegF(${i},'fuelContamDest',this.checked)"> DEST
-        </label>
-      </div>
-    </div>
-
-    ${leg.lastBy ? `<div style="font-size:10px;color:var(--text-muted);text-align:right;margin-top:8px">Last updated by ${leg.lastBy}</div>` : ''}
-  </div>`;
-}
-
-// Smart update — only set values for inputs not currently focused
-function smartUpdateLeg(leg, i, trip) {
-  const su = (id, val) => {
-    const el = document.getElementById(id);
-    if (el && document.activeElement !== el) el.value = val ?? '';
   };
-  const sc = (id, val) => {
-    const el = document.getElementById(id);
-    if (el && document.activeElement !== el) el.checked = !!val;
+
+  const selPR = (li, val) => {
+    const ed = canEdit('prApproach');
+    return `<select class="tf-sel" ${ed?`onchange="handleFieldInput(${li},'prApproach',this)"`:' disabled'}>
+      ${PR_TYPES.map(t=>`<option value="${t}" ${val===t?'selected':''}>${t||'PR—'}</option>`).join('')}
+    </select>`;
   };
-  su(`lp-${i}-off`,  leg.offTime||'');
-  su(`lp-${i}-on`,   leg.onTime||'');
-  su(`lp-${i}-pf`,   leg.pilotFlying||'');
-  su(`lp-${i}-fltm`, leg.fltMinutes||'');
-  su(`lp-${i}-pr`,   leg.prApproach||'');
-  su(`lp-${i}-np`,   leg.npApproach||'');
-  su(`lp-${i}-nite`, leg.niteMin||'');
-  su(`lp-${i}-inst`, leg.instMin||'');
-  su(`lp-${i}-fout`, leg.fuelOut||'');
-  su(`lp-${i}-fin`,  leg.fuelIn||'');
-  su(`lp-${i}-qty`,  leg.qtyPurchased||'');
-  sc(`lp-${i}-fcd`,  leg.fuelContamDept);
-  sc(`lp-${i}-fca`,  leg.fuelContamDest);
 
-  // Tenths
-  const tb = document.getElementById(`lp-${i}-tenths`);
-  if (tb) tb.textContent = leg.fltTenths || '—';
+  const selNP = (li, val) => {
+    const ed = canEdit('npApproach');
+    return `<select class="tf-sel" ${ed?`onchange="handleFieldInput(${li},'npApproach',this)"`:' disabled'}>
+      ${NP_TYPES.map(t=>`<option value="${t}" ${val===t?'selected':''}>${t||'NP—'}</option>`).join('')}
+    </select>`;
+  };
 
-  // D/N buttons
-  refreshDN(i, 'takeoffType', leg.takeoffType);
-  refreshDN(i, 'landingType', leg.landingType);
+  const row = (lbl, cells, cls='') =>
+    `<tr><td class="tt-lbl${cls?' '+cls:''}">${lbl}</td>${cells.map(c=>`<td class="tt-cell">${c}</td>`).join('')}</tr>`;
 
-  // lastBy
-  const panel = document.getElementById(`lp-${i}`);
-  if (panel && leg.lastBy) {
-    let lbEl = panel.querySelector('.lastby');
-    if (!lbEl) {
-      lbEl = document.createElement('div');
-      lbEl.className = 'lastby';
-      lbEl.style.cssText = 'font-size:10px;color:var(--text-muted);text-align:right;margin-top:8px';
-      panel.appendChild(lbEl);
-    }
-    lbEl.textContent = `Last updated by ${leg.lastBy}`;
+  const row2 = (t, b, cells, cls='') =>
+    `<tr><td class="tt-lbl${cls?' '+cls:''}" style="vertical-align:middle">
+      <div class="tt-lbl-split"><span class="tt-lbl-t">${t}</span><span class="tt-lbl-b">${b}</span></div>
+    </td>${cells.map(c=>`<td class="tt-cell">${c}</td>`).join('')}</tr>`;
+
+  const fboRow = (lbl, cells) =>
+    `<tr><td class="tt-lbl tt-lbl-fbo">${lbl}</td>${cells.map(c=>`<td class="tt-cell tt-cell-fbo">${c}</td>`).join('')}</tr>`;
+
+  const sec = (label) =>
+    `<tr><td class="tt-sec" colspan="${n+1}">${label}</td></tr>`;
+
+  // ── Build pax cell ──
+  const paxCell = (leg, li) => {
+    const pax = leg.passengers || [];
+    const ed = canEdit('passengers');
+    const wt = pax.reduce((s,p)=>s+(parseInt(p.weight)||0),0);
+    let html = '<div class="pax-cell">';
+    pax.forEach((p,pi) => {
+      html += `<div class="pax-row">
+        <input class="tf tf-pax-name sans" value="${e(p.name)}" placeholder="Last, First"
+          oninput="handlePaxInput(${li},${pi},'name',this.value)" ${ed?'':'disabled'}>
+        ${p.lead?'<span class="pax-lead">(L)</span>':''}
+        <input type="number" class="tf tf-pax-wt" value="${p.weight||''}" placeholder="lbs"
+          oninput="handlePaxInput(${li},${pi},'weight',this.value)" ${ed?'':'disabled'}>
+        ${ed?`<button class="pax-del" onclick="removePax(${li},${pi})">×</button>`:''}
+      </div>`;
+    });
+    if (ed) html += `<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:3px;font-size:10px" onclick="addPax(${li})">+ Passenger</button>`;
+    html += `<div class="pax-total" id="pax-total-${li}">${pax.length} PAX · ${wt} lbs</div>`;
+    html += '</div>';
+    return html;
+  };
+
+  // ── Table ──
+  let t = `<table class="trip-table">
+  <colgroup><col style="width:76px;min-width:76px">
+  ${legs.map(()=>'<col style="min-width:210px">').join('')}</colgroup>
+  <thead><tr>
+    <th class="tt-lbl" style="border:none;background:var(--bg2)"></th>
+    ${legs.map((l,i)=>`<th class="tt-hdr">
+      <div class="tt-leg-num">LEG ${i+1}</div>
+      <div class="tt-leg-route" id="leg-hdr-${i}">${e(l.dept)||'?'} → ${e(l.dest)||'?'}</div>
+    </th>`).join('')}
+  </tr></thead>
+  <tbody>`;
+
+  // LOCAL DATE (trip-level, displayed per column)
+  t += row('LOCAL DATE', legs.map(()=>`<span class="tf-ro">${fmtDate(trip.localDate)}</span>`));
+
+  // PIC / SIC
+  t += row2('PIC','SIC', legs.map((l,i)=>
+    tfPair(i,'pic',l.pic||trip.pic,'sic',l.sic||trip.sic,{p1:'PIC',p2:'SIC',ml:'6',ac:'characters'})));
+
+  // DEPT / DEST
+  t += row2('DEPT','DEST', legs.map((l,i)=>
+    tfPair(i,'dept',l.dept,'dest',l.dest,{p1:'DEPT',p2:'DEST',ml:'5',ac:'characters'})));
+
+  // Airport names
+  t += row2('DEPT Name','DEST Name', legs.map((l,i)=>
+    tfPair(i,'deptName',l.deptName,'destName',l.destName,{mono:false,p1:'Dept airport',p2:'Dest airport'})));
+
+  // Coordinates
+  t += row2('Lat Dept','Lat Dest', legs.map((l,i)=>
+    tfPair(i,'deptLat',l.deptLat,'destLat',l.destLat,{p1:'N00.00.00',p2:'N00.00.00'})));
+  t += row2('Lon Dept','Lon Dest', legs.map((l,i)=>
+    tfPair(i,'deptLon',l.deptLon,'destLon',l.destLon,{p1:'W00.00.00',p2:'W00.00.00'})));
+
+  // ETD / ETA
+  t += row2('ETD','ETA', legs.map((l,i)=>
+    tfPair(i,'etd',l.etd,'eta',l.eta,{p1:'0000',p2:'0000'})));
+
+  // ETE / NM
+  t += row2('ETE','NM', legs.map((l,i)=>
+    tfPair(i,'ete',l.ete,'nm',l.nm,{p1:'00:00',p2:'nm'})));
+
+  // Fuel Out / In
+  t += row2('Fuel Out','Fuel In', legs.map((l,i)=>
+    tfPair(i,'fuelOut',l.fuelOut,'fuelIn',l.fuelIn,{type:'number',p1:'lbs',p2:'lbs'})));
+
+  // Est Burn
+  t += row('Est Burn', legs.map((l,i)=>tf(i,'estBurn',l.estBurn,{type:'number',ph:'lbs'})));
+
+  // Qty Purchased
+  t += row('Qty Purchased', legs.map((l,i)=>tf(i,'qtyPurchased',l.qtyPurchased,{ph:'gal'})));
+
+  // Fuel Contamination
+  t += row('Fuel Contam', legs.map((l,i)=>`<div class="tf-chk-row">
+    <label class="tf-chk"><input type="checkbox" ${l.fuelContamDept?'checked':''} ${canEdit('fuelContamDept')?'':'disabled'}
+      onchange="handleFieldInput(${i},'fuelContamDept',this)"> DEPT</label>
+    <label class="tf-chk"><input type="checkbox" ${l.fuelContamDest?'checked':''} ${canEdit('fuelContamDest')?'':'disabled'}
+      onchange="handleFieldInput(${i},'fuelContamDest',this)"> DEST</label>
+  </div>`));
+
+  // Program
+  t += row('Program', legs.map((l,i)=>tf(i,'program',l.program||trip.program,{mono:false})));
+
+  // ── PILOT SECTION ──
+  t += sec('✈  Pilot Entry');
+
+  t += row2('OFF','ON', legs.map((l,i)=>
+    tfPair(i,'offTime',l.offTime,'onTime',l.onTime,{p1:'0000',p2:'0000',ml:'4'})));
+
+  // Pilot Flying + FLT
+  t += row2('Pilot Flying','FLT (min / tenths)', legs.map((l,i)=>`
+    <div class="tf-pair">
+      ${tf(i,'pilotFlying',l.pilotFlying,{ml:'6',ac:'characters',ph:'Initials'})}
+      ${tf(i,'fltMinutes',l.fltMinutes,{type:'number',ph:'min',extra:'class="tf tf-narrow" style="max-width:52px"'})}
+      <span class="tf-tenths" id="tenths-${i}">${l.fltTenths||'—'}</span>
+    </div>`));
+
+  t += row2('NITE','INST', legs.map((l,i)=>
+    tfPair(i,'niteMin',l.niteMin,'instMin',l.instMin,{type:'number',p1:'min',p2:'min'})));
+
+  // T/L APP
+  t += row('T/L  APP', legs.map((l,i)=>`
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      ${dn(i,'takeoffType',l.takeoffType,'T/O')}
+      ${dn(i,'landingType',l.landingType,'LDG')}
+      ${selPR(i,l.prApproach)}
+      ${selNP(i,l.npApproach)}
+    </div>`));
+
+  // NITE / INST min (already above)
+
+  // ── FBO SECTION ──
+  t += sec('🏢  FBO');
+  t += fboRow('DEPT FBO', legs.map((l,i)=>tf(i,'deptFBO',l.deptFBO,{mono:false,ph:'FBO name'})));
+  t += fboRow('Phone / Fax', legs.map((l,i)=>tfPair(i,'deptFBOPhone',l.deptFBOPhone,'deptFBOFax',l.deptFBOFax,{mono:false,p1:'Phone',p2:'Fax'})));
+  t += fboRow('UNIC / ARINC', legs.map((l,i)=>tfPair(i,'deptFBOUnic',l.deptFBOUnic,'deptFBOArinc',l.deptFBOArinc,{ph:'000.00'})));
+  t += fboRow('ARRV FBO', legs.map((l,i)=>tf(i,'arrvFBO',l.arrvFBO,{mono:false,ph:'FBO name'})));
+  t += fboRow('Phone / Fax', legs.map((l,i)=>tfPair(i,'arrvFBOPhone',l.arrvFBOPhone,'arrvFBOFax',l.arrvFBOFax,{mono:false,p1:'Phone',p2:'Fax'})));
+  t += fboRow('UNIC / ARINC', legs.map((l,i)=>tfPair(i,'arrvFBOUnic',l.arrvFBOUnic,'arrvFBOArinc',l.arrvFBOArinc,{ph:'000.00'})));
+
+  // ── PASSENGERS ──
+  t += sec('👤  Passengers');
+  t += `<tr><td class="tt-lbl tt-lbl-pax">Passengers</td>
+    ${legs.map((l,i)=>`<td class="tt-cell" id="pax-cell-${i}">${paxCell(l,i)}</td>`).join('')}</tr>`;
+
+  t += row('PAX Dept Trans', legs.map((l,i)=>tf(i,'paxDeptTrans',l.paxDeptTrans,{mono:false})));
+  t += row('PAX Arrv Trans', legs.map((l,i)=>tf(i,'paxArrvTrans',l.paxArrvTrans,{mono:false})));
+  t += row('Catering', legs.map((l,i)=>tf(i,'catering',l.catering,{mono:false})));
+
+  // Leg Notes
+  t += `<tr><td class="tt-lbl tt-lbl-pax" style="vertical-align:top;padding-top:5px">Leg Notes</td>
+    ${legs.map((l,i)=>`<td class="tt-cell">
+      <textarea class="tf tf-notes sans" placeholder="Notes…"
+        oninput="handleFieldInput(${i},'legNotes',this)" ${canEdit('legNotes')?'':'disabled'}>${e(l.legNotes||'')}</textarea>
+    </td>`).join('')}</tr>`;
+
+  // Last updated by
+  const anyLastBy = legs.some(l=>l.lastBy);
+  if (anyLastBy) {
+    t += `<tr><td class="tt-lbl" style="font-size:7px">Updated by</td>
+      ${legs.map(l=>`<td class="tt-cell" style="font-size:9px;color:var(--text-muted)">${l.lastBy||''}</td>`).join('')}</tr>`;
   }
+
+  t += '</tbody></table>';
+  return t;
 }
 
-function refreshDN(i, field, val) {
-  // Find the dn-wrap for this field
-  const panel = document.getElementById(`lp-${i}`);
-  if (!panel) return;
-  const wraps = panel.querySelectorAll('.dn-wrap');
-  const idx   = field === 'takeoffType' ? 0 : 1;
-  if (!wraps[idx]) return;
-  const btns = wraps[idx].querySelectorAll('.dn-btn');
-  btns[0].className = 'dn-btn' + (val==='D' ? ' day'   : '');
-  btns[1].className = 'dn-btn' + (val==='N' ? ' night' : '');
-  btns[2].className = 'dn-btn clear-btn';
-}
-
+// ============================================================
+// LEG FIELD UPDATES
+// ============================================================
 // ============================================================
 // LEG FIELD UPDATES
 // ============================================================
@@ -1227,26 +1289,107 @@ async function updateLegF(i, field, value) {
   }, 600);
 }
 
-async function onFltMinutes(i, val) {
-  const tenths = minToTenths(val);
-  const tb = document.getElementById(`lp-${i}-tenths`);
-  if (tb) tb.textContent = tenths || '—';
-  await updateLegF(i, 'fltMinutes', val);
-  if (!currentTrip?.legs[i]) return;
-  currentTrip.legs[i].fltTenths = tenths;
-  const key = `${i}-fltTenths`;
-  clearTimeout(saveTimers[key]);
-  saveTimers[key] = setTimeout(async () => {
-    try { await db.collection('trips').doc(currentTrip.id).update({ legs: currentTrip.legs }); } catch(e){}
-  }, 600);
+// ── Unified field input handler ──
+function handleFieldInput(li, field, el) {
+  let value = el.type === 'checkbox' ? el.checked : el.value;
+
+  // DEPT/DEST: clear name and coordinates
+  if (field === 'dept' || field === 'dest') {
+    const prefix = field;
+    ['Name','Lat','Lon'].forEach(suffix => {
+      const f = prefix + suffix;
+      updateLegF(li, f, '');
+      // Clear any DOM inputs for these fields
+      document.querySelectorAll(`[data-leg="${li}"][data-field="${f}"]`).forEach(inp => { if (document.activeElement !== inp) inp.value = ''; });
+    });
+    // Update column header
+    if (currentTrip?.legs[li]) {
+      currentTrip.legs[li][field] = value;
+      const hdr = document.getElementById(`leg-hdr-${li}`);
+      if (hdr) hdr.textContent = `${currentTrip.legs[li].dept||'?'} → ${currentTrip.legs[li].dest||'?'}`;
+    }
+  }
+
+  // FLT minutes → auto-tenths
+  if (field === 'fltMinutes') {
+    const tenths = minToTenths(value);
+    const tb = document.getElementById(`tenths-${li}`);
+    if (tb) tb.textContent = tenths || '—';
+    updateLegF(li, 'fltTenths', tenths);
+  }
+
+  updateLegF(li, field, value);
 }
 
-async function setDN(i, field, val) {
-  if (!currentTrip?.legs[i]) return;
-  const cur = currentTrip.legs[i][field];
-  const nv  = cur === val ? '' : val;
-  refreshDN(i, field, nv);
-  await updateLegF(i, field, nv);
+// ── D/N toggle: cycles D → N → empty ──
+function handleDN(li, field, containerEl) {
+  const span = containerEl.querySelector('.dn-val');
+  if (!span) return;
+  const cur = span.dataset.val || '';
+  const next = cur === '' ? 'D' : cur === 'D' ? 'N' : '';
+  span.dataset.val = next;
+  span.textContent = next || '—';
+  span.className = `dn-val ${next==='D'?'dn-day':next==='N'?'dn-night':''}`;
+  updateLegF(li, field, next);
+}
+
+// ── Passenger helpers ──
+function handlePaxInput(li, pi, subfield, value) {
+  if (!currentTrip?.legs[li]) return;
+  const pax = [...(currentTrip.legs[li].passengers||[])];
+  if (!pax[pi]) return;
+  pax[pi] = { ...pax[pi], [subfield]: subfield === 'weight' ? (parseInt(value)||0) : value };
+  currentTrip.legs[li].passengers = pax;
+  updatePaxTotal(li);
+  updateLegF(li, 'passengers', pax);
+}
+
+function addPax(li) {
+  if (!currentTrip?.legs[li]) return;
+  const pax = [...(currentTrip.legs[li].passengers||[]), { name:'', lead:false, weight:0 }];
+  currentTrip.legs[li].passengers = pax;
+  refreshPaxCell(li);
+  updateLegF(li, 'passengers', pax);
+}
+
+function removePax(li, pi) {
+  if (!currentTrip?.legs[li]) return;
+  const pax = [...(currentTrip.legs[li].passengers||[])];
+  pax.splice(pi, 1);
+  currentTrip.legs[li].passengers = pax;
+  refreshPaxCell(li);
+  updatePaxTotal(li);
+  updateLegF(li, 'passengers', pax);
+}
+
+function refreshPaxCell(li) {
+  const cell = document.getElementById(`pax-cell-${li}`);
+  if (!cell || !currentTrip?.legs[li]) return;
+  // Rebuild pax cell inline — we call buildTripTable paxCell logic
+  const leg = currentTrip.legs[li];
+  const pax = leg.passengers || [];
+  const ed = canEdit('passengers');
+  const wt = pax.reduce((s,p)=>s+(parseInt(p.weight)||0),0);
+  let html = '<div class="pax-cell">';
+  pax.forEach((p,pi) => {
+    html += `<div class="pax-row">
+      <input class="tf tf-pax-name sans" value="${esc(p.name)}" placeholder="Last, First"
+        oninput="handlePaxInput(${li},${pi},'name',this.value)" ${ed?'':'disabled'}>
+      ${p.lead?'<span class="pax-lead">(L)</span>':''}
+      <input type="number" class="tf tf-pax-wt" value="${p.weight||''}" placeholder="lbs"
+        oninput="handlePaxInput(${li},${pi},'weight',this.value)" ${ed?'':'disabled'}>
+      ${ed?`<button class="pax-del" onclick="removePax(${li},${pi})">×</button>`:''}
+    </div>`;
+  });
+  if (ed) html += `<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:3px;font-size:10px" onclick="addPax(${li})">+ Passenger</button>`;
+  html += `<div class="pax-total" id="pax-total-${li}">${pax.length} PAX · ${wt} lbs</div></div>`;
+  cell.innerHTML = html;
+}
+
+function updatePaxTotal(li) {
+  const pax = currentTrip?.legs[li]?.passengers || [];
+  const el = document.getElementById(`pax-total-${li}`);
+  if (el) el.textContent = `${pax.length} PAX · ${pax.reduce((s,p)=>s+(parseInt(p.weight)||0),0)} lbs`;
 }
 
 function debounceSave(field, value) {
@@ -1265,9 +1408,12 @@ async function addLegToTrip() {
   if (!currentTrip || currentUser.role !== 'ops') return;
   const legs = [...(currentTrip.legs||[])];
   legs.push({
-    dept:'',dest:'',deptName:'',destName:'',etd:'',eta:'',ete:'',nm:'',
-    estBurn:'',deptFBO:'',deptFBOPhone:'',arrvFBO:'',arrvFBOPhone:'',
-    passengers:[],paxDeptTrans:'',paxArrvTrans:'',catering:'',
+    dept:'',dest:'',deptName:'',destName:'',
+    deptLat:'',deptLon:'',destLat:'',destLon:'',
+    etd:'',eta:'',ete:'',nm:'',estBurn:'',
+    deptFBO:'',deptFBOPhone:'',deptFBOFax:'',deptFBOUnic:'',deptFBOArinc:'',
+    arrvFBO:'',arrvFBOPhone:'',arrvFBOFax:'',arrvFBOUnic:'',arrvFBOArinc:'',
+    passengers:[],paxDeptTrans:'',paxArrvTrans:'',catering:'',legNotes:'',
     offTime:'',onTime:'',pilotFlying:'',fltMinutes:'',fltTenths:'',
     takeoffType:'',landingType:'',prApproach:'',npApproach:'',
     niteMin:'',instMin:'',fuelOut:'',fuelIn:'',qtyPurchased:'',
@@ -1649,6 +1795,18 @@ async function parsePorsidePDF(file) {
       destName=nameRow.filter(i=>i.x>=mid).map(i=>i.text).join(' ');
     }
 
+    // ── Coordinates (lat ~y152, lon ~y166 relative to PDF) ──
+    let deptLat='',destLat='',deptLon='',destLon='';
+    if(yDEPT){
+      const latRow=col.filter(i=>i.y>yDEPT+12&&i.y<yDEPT+28).sort((a,b)=>a.x-b.x);
+      const lonRow=col.filter(i=>i.y>yDEPT+26&&i.y<yDEPT+42).sort((a,b)=>a.x-b.x);
+      const mid2=(colBounds[li].start+Math.min(colBounds[li].end,colBounds[li].start+170))/2;
+      deptLat=latRow.filter(i=>i.x<mid2).map(i=>i.text).join('');
+      destLat=latRow.filter(i=>i.x>=mid2).map(i=>i.text).join('');
+      deptLon=lonRow.filter(i=>i.x<mid2).map(i=>i.text).join('');
+      destLon=lonRow.filter(i=>i.x>=mid2).map(i=>i.text).join('');
+    }
+
     // ── ETD / ETA ──
     let etd='',eta='';
     if(yETD){const ts=atY(col,yETD,6);etd=ts[0]?.text||'';eta=ts[1]?.text||'';}
@@ -1720,6 +1878,7 @@ async function parsePorsidePDF(file) {
 
     legs.push({
       dept, dest, deptName, destName,
+      deptLat, deptLon, destLat, destLon,
       etd, eta, ete, nm, estBurn,
       deptFBO, deptFBOPhone, deptFBOFax, deptFBOUnic, deptFBOArinc,
       arrvFBO, arrvFBOPhone, arrvFBOFax, arrvFBOUnic, arrvFBOArinc,
@@ -1731,6 +1890,7 @@ async function parsePorsidePDF(file) {
       niteMin:'', instMin:'',
       fuelOut:'', fuelIn:'', qtyPurchased:'',
       fuelContamDept:false, fuelContamDest:false,
+      legNotes:'',
     });
   }
 
