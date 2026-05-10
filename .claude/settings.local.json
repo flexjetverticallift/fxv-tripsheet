@@ -4,7 +4,11 @@
       "Bash(git remote *)",
       "Bash(git push *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(cp /c/Users/Kieran/Downloads/FXV_TripSheet.html /c/FXV/index.html)",
+      "Bash(git -C /c/FXV add .)",
+      "Bash(git -C /c/FXV commit -m \"Fix PDF parser: trip number, FBO, passengers, leg notes\")",
+      "Bash(git -C /c/FXV push)"
     ]
   }
 }

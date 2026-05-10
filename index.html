@@ -1484,215 +1484,245 @@ async function parsePorsidePDF(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-  // ── Page 1: main data ──
-  const page1 = await pdf.getPage(1);
-  const vp1   = page1.getViewport({ scale: 1 });
-  const tc1   = await page1.getTextContent();
-  const items = tc1.items
-    .filter(i => i.str && i.str.trim())
-    .map(i => ({ text: i.str.trim(), x: i.transform[4], y: vp1.height - i.transform[5] }));
-
-  // ── Page 2: notes ──
-  let legNotes = '';
-  if (pdf.numPages >= 2) {
-    try {
-      const page2 = await pdf.getPage(2);
-      const vp2   = page2.getViewport({ scale: 1 });
-      const tc2   = await page2.getTextContent();
-      const p2 = tc2.items
-        .filter(i => i.str && i.str.trim())
-        .map(i => ({ text: i.str.trim(), x: i.transform[4], y: vp2.height - i.transform[5] }));
-      const notesLbl = p2.find(i => i.text === 'NOTES' && p2.some(j => j.text === 'LEG' && Math.abs(j.y - i.y) < 6));
-      if (notesLbl) {
-        const skip = new Set(['LEG','NOTES','(trip_sheet','-','Rev.','10','Apr','2023)','Page','1','2','of']);
-        const noteItems = p2.filter(i => i.y >= notesLbl.y - 5 && i.x > 110 && !skip.has(i.text))
-          .sort((a,b) => a.y - b.y || a.x - b.x);
-        const rows = []; let curRow = [], lastY = null;
-        for (const it of noteItems) {
-          if (lastY !== null && Math.abs(it.y - lastY) > 10) {
-            if (curRow.length) rows.push(curRow.map(i=>i.text).join(' '));
-            curRow = [];
-          }
-          curRow.push(it); lastY = it.y;
-        }
-        if (curRow.length) rows.push(curRow.map(i=>i.text).join(' '));
-        legNotes = rows.join('\n').trim();
-      }
-    } catch(e) { console.warn('Page 2:', e); }
+  // ── Collect all items across all pages ──
+  const allPageItems = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const vp   = page.getViewport({ scale: 1 });
+    const tc   = await page.getTextContent();
+    tc.items.filter(i => i.str && i.str.trim()).forEach(i => {
+      allPageItems.push({ text: i.str.trim(), x: i.transform[4], y: vp.height - i.transform[5], page: p });
+    });
   }
+  const items = allPageItems.filter(i => i.page === 1);
 
-  // ── Header ──
-  let tripNumber = '', program = '', aircraft = '', tripRequester = '';
+  // ── Full text (reading order) for regex-based header extraction ──
+  const fullText = items.slice().sort((a,b)=>a.y-b.y||a.x-b.x).map(i=>i.text).join(' ');
 
-  const tripLbl = items.find(i => i.text === 'Trip:');
-  if (tripLbl) {
-    const row = items.filter(i => Math.abs(i.y - tripLbl.y) < 5 && i.x > tripLbl.x).sort((a,b)=>a.x-b.x);
-    const numI = row.findIndex(v => /^\d{4,6}$/.test(v.text));
-    if (numI >= 0) {
-      tripNumber = row[numI].text;
-      program = row.slice(numI+1).filter(v=>v.text!=='/').map(v=>v.text).join(' ');
-    }
-  }
-  const acLbl = items.find(i => i.text === 'Aircraft:');
-  if (acLbl) {
-    const ac = items.filter(i => Math.abs(i.y-acLbl.y)<5 && i.x>acLbl.x).sort((a,b)=>a.x-b.x)[0];
-    aircraft = ac?.text || '';
-  }
-  const reqLbl = items.find(i => i.text === 'Requester:');
-  if (reqLbl) {
-    tripRequester = items.filter(i => Math.abs(i.y-reqLbl.y)<5 && i.x>reqLbl.x)
-      .sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ');
-  }
+  // ── HEADER: trip number, program ──
+  let tripNumber='', program='';
+  const tripM = fullText.match(/Trip\s*:?\s*(\d{4,6})\s*\/\s*(.*?)(?:\s+Aircraft|\s+Trip\s+Requester|$)/i);
+  if (tripM) { tripNumber=tripM[1].trim(); program=tripM[2].trim(); }
 
-  // ── Column detection via LEG headers ──
-  const legHdrs = [];
+  // ── HEADER: aircraft ──
+  let aircraft='';
+  const acM = fullText.match(/Aircraft\s*:?\s*([A-Z0-9]{4,6})/i);
+  if (acM) aircraft = acM[1];
+
+  // ── HEADER: trip requester ──
+  let tripRequester='';
+  const reqM = fullText.match(/Requester\s*:?\s*(.*?)(?:\s+PRINTED|\s+Page\s+\d|$)/i);
+  if (reqM) tripRequester = reqM[1].trim();
+
+  // ── COLUMN DETECTION via LEG headers ──
   const legWords = items.filter(i => i.text === 'LEG');
+  const legHdrs = [];
   for (const lw of legWords) {
-    const numI = items.find(i => Math.abs(i.y-lw.y)<5 && i.x>lw.x && /^\d$/.test(i.text));
-    if (numI) legHdrs.push({ num: parseInt(numI.text), x: lw.x, y: lw.y });
+    const numI = items.find(i => Math.abs(i.y-lw.y)<6 && i.x>lw.x && i.x<lw.x+30 && /^\d$/.test(i.text));
+    if (numI) legHdrs.push({ num:parseInt(numI.text), x:lw.x });
   }
   legHdrs.sort((a,b)=>a.x-b.x);
-  const seen = new Set(); const uLegs = [];
-  for (const h of legHdrs) { if (!seen.has(h.num)) { seen.add(h.num); uLegs.push(h); } }
+  const seen=new Set(), uLegs=[];
+  for (const h of legHdrs) { if(!seen.has(h.num)){seen.add(h.num);uLegs.push(h);} }
   const numLegs = uLegs.length || 2;
 
-  // Build column bounds — fallback to known Portside layout if detection fails
+  // Column bounds: from LEG header midpoints
   let colBounds = [];
   if (uLegs.length >= 2) {
-    colBounds = uLegs.map((lh, i) => ({
-      start: i === 0 ? 110 : (uLegs[i-1].x + lh.x)/2,
-      end:   i < uLegs.length-1 ? (lh.x + uLegs[i+1].x)/2 : 9999
+    colBounds = uLegs.map((lh,i) => ({
+      start: i===0 ? 110 : (uLegs[i-1].x+lh.x)/2,
+      end:   i<uLegs.length-1 ? (lh.x+uLegs[i+1].x)/2 : 9999
     }));
   } else {
-    // Fallback: use known Portside 3-leg column layout
-    colBounds = [
-      { start: 110, end: 256 },
-      { start: 256, end: 417 },
-      { start: 417, end: 9999 }
-    ];
+    colBounds = [{start:110,end:256},{start:256,end:417},{start:417,end:9999}];
   }
-
-  // Clamp numLegs to colBounds length
   const safeNumLegs = Math.min(numLegs, colBounds.length);
 
   const colOf = (idx) => {
     if (!colBounds[idx]) return [];
-    return items.filter(i => i.x >= colBounds[idx].start && i.x < colBounds[idx].end);
+    return items.filter(i => i.x>=colBounds[idx].start && i.x<colBounds[idx].end);
   };
-  const atY   = (col, y, tol=7) => col.filter(i=>Math.abs(i.y-y)<=tol).sort((a,b)=>a.x-b.x);
 
-  // ── Reference Y positions from label column (x<110) ──
-  const lY = (t) => items.find(i => i.x < 110 && i.text === t)?.y;
-  const yDate   = lY('DATE');
-  const yPIC    = lY('PIC');
-  const yDEPT   = items.filter(i=>i.x<110&&i.text==='DEPT').sort((a,b)=>a.y-b.y)[0]?.y;
-  const yETD    = lY('ETD');
-  const yETE    = lY('ETE');
-  const yBurn   = lY('Burn');
+  // Items at a specific y (tolerance), sorted by x
+  const atY = (col, y, tol=8) => col.filter(i=>Math.abs(i.y-y)<=tol).sort((a,b)=>a.x-b.x);
 
-  // ── Parse date string to ISO ──
+  // Y of a label in the label column (x < 110)
+  const lY = (t) => {
+    const found = items.filter(i=>i.x<110&&i.text===t);
+    return found.length ? found[0].y : null;
+  };
+
+  // Reference Y positions
+  const yDate  = lY('DATE');
+  const yPIC   = lY('PIC');
+  const yDEPT  = items.filter(i=>i.x<110&&i.text==='DEPT').sort((a,b)=>a.y-b.y)[0]?.y;
+  const yETD   = lY('ETD');
+  const yETE   = lY('ETE');
+  const yBurn  = lY('Burn');
+
+  // Date string → ISO
   const parseDate = (str) => {
     const m = str.match(/(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*[-–]\s*(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2})/i);
     if (!m) return '';
-    const mo = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}[m[3].toLowerCase()];
+    const mo={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12}[m[3].toLowerCase()];
     return `${2000+parseInt(m[4])}-${String(mo).padStart(2,'0')}-${String(parseInt(m[2])).padStart(2,'0')}`;
   };
 
-  let tripLocalDate = '', tripPIC = '', tripSIC = '';
+  let tripLocalDate='', tripPIC='', tripSIC='';
+
+  // ── LEG NOTES: look in label column row AND across all pages ──
+  let legNotes = '';
+  // Page 1 bottom: LEG NOTES label + notes text to the right
+  const legNotesLbl = items.find(i=>i.text==='NOTES' && items.some(j=>j.text==='LEG'&&Math.abs(j.y-i.y)<6&&j.x<i.x));
+  if (legNotesLbl) {
+    const skip = new Set(['LEG','NOTES','(trip_sheet','-','Rev.','10','Apr','2023)','Page','1','2','of','.']);
+    const noteItems = items.filter(i=>i.y>=legNotesLbl.y-5&&i.x>110&&!skip.has(i.text))
+      .sort((a,b)=>a.y-b.y||a.x-b.x);
+    const rows=[]; let cur=[],ly=null;
+    for (const it of noteItems) {
+      if (ly!==null&&Math.abs(it.y-ly)>10){if(cur.length)rows.push(cur.map(i=>i.text).join(' '));cur=[];}
+      cur.push(it);ly=it.y;
+    }
+    if(cur.length)rows.push(cur.map(i=>i.text).join(' '));
+    legNotes = rows.join('\n').trim();
+  }
+  // Page 2 notes (if not already found on page 1 with content)
+  if (!legNotes && pdf.numPages >= 2) {
+    try {
+      const p2items = allPageItems.filter(i=>i.page===2);
+      const nl2 = p2items.find(i=>i.text==='NOTES'&&p2items.some(j=>j.text==='LEG'&&Math.abs(j.y-i.y)<6&&j.x<i.x));
+      if (nl2) {
+        const skip2=new Set(['LEG','NOTES','(trip_sheet','-','Rev.','10','Apr','2023)','Page','1','2','of','.']);
+        const ni2=p2items.filter(i=>i.y>=nl2.y-5&&i.x>110&&!skip2.has(i.text)).sort((a,b)=>a.y-b.y||a.x-b.x);
+        const rows2=[]; let cur2=[],ly2=null;
+        for(const it of ni2){if(ly2!==null&&Math.abs(it.y-ly2)>10){if(cur2.length)rows2.push(cur2.map(i=>i.text).join(' '));cur2=[];}cur2.push(it);ly2=it.y;}
+        if(cur2.length)rows2.push(cur2.map(i=>i.text).join(' '));
+        legNotes=rows2.join('\n').trim();
+      }
+    } catch(e) { console.warn('P2 notes:',e); }
+  }
+
+  // ── GROUP ROWS within a column and y range ──
+  const groupRows = (col, yMin, yMax, tol=7) => {
+    const rows=[]; let cur=[],ly=null;
+    for (const it of col.filter(i=>i.y>=yMin&&i.y<=yMax).sort((a,b)=>a.y-b.y||a.x-b.x)) {
+      if(ly!==null&&Math.abs(it.y-ly)>tol){if(cur.length)rows.push(cur);cur=[];}
+      cur.push(it);ly=it.y;
+    }
+    if(cur.length)rows.push(cur);
+    return rows;
+  };
+
+  // Split a row of items into left/right halves within a column
+  const splitLR = (rowItems, colIdx) => {
+    const mid = (colBounds[colIdx].start + Math.min(colBounds[colIdx].end, colBounds[colIdx].start + 160)) / 2;
+    const left  = rowItems.filter(i=>i.x< mid).map(i=>i.text).join(' ');
+    const right = rowItems.filter(i=>i.x>=mid).map(i=>i.text).join(' ');
+    return [left.trim(), right.trim()];
+  };
+
   const legs = [];
 
   for (let li = 0; li < safeNumLegs; li++) {
     const col = colOf(li);
 
-    // Date
-    let localDate = '';
-    if (yDate) localDate = parseDate(atY(col,yDate,8).map(i=>i.text).join(' '));
-    if (li===0 && localDate) tripLocalDate = localDate;
+    // ── Date ──
+    let localDate='';
+    if(yDate) localDate=parseDate(atY(col,yDate,8).map(i=>i.text).join(' '));
+    if(li===0&&localDate) tripLocalDate=localDate;
 
-    // PIC / SIC
-    let pic='', sic='';
-    if (yPIC) {
-      const ps = atY(col,yPIC,6);
-      pic = ps[0]?.text||''; sic = ps[1]?.text||'';
-    }
-    if (li===0) { tripPIC=pic; tripSIC=sic; }
+    // ── PIC / SIC ──
+    let pic='',sic='';
+    if(yPIC){const ps=atY(col,yPIC,6);pic=ps[0]?.text||'';sic=ps[1]?.text||'';}
+    if(li===0){tripPIC=pic;tripSIC=sic;}
 
-    // DEPT / DEST codes
-    let dept='', dest='';
-    if (yDEPT) {
-      const codes = atY(col,yDEPT,8);
-      dept = codes[0]?.text||''; dest = codes[1]?.text||'';
-    }
+    // ── DEPT / DEST codes ──
+    let dept='',dest='';
+    if(yDEPT){const codes=atY(col,yDEPT,8);dept=codes[0]?.text||'';dest=codes[1]?.text||'';}
 
-    // Airport full names (row immediately below DEPT/DEST)
-    let deptName='', destName='';
-    if (yDEPT) {
-      const nameRow = col.filter(i=>i.y>yDEPT+2&&i.y<yDEPT+22).sort((a,b)=>a.x-b.x);
-      const mid = (colBounds[li].start + colBounds[li].end) / 2;
-      deptName = nameRow.filter(i=>i.x<mid).map(i=>i.text).join(' ');
-      destName = nameRow.filter(i=>i.x>=mid).map(i=>i.text).join(' ');
+    // ── Airport names (row just below DEPT/DEST codes) ──
+    let deptName='',destName='';
+    if(yDEPT){
+      const nameRow=col.filter(i=>i.y>yDEPT+2&&i.y<yDEPT+22).sort((a,b)=>a.x-b.x);
+      const mid=(colBounds[li].start+Math.min(colBounds[li].end,colBounds[li].start+170))/2;
+      deptName=nameRow.filter(i=>i.x<mid).map(i=>i.text).join(' ');
+      destName=nameRow.filter(i=>i.x>=mid).map(i=>i.text).join(' ');
     }
 
-    // ETD / ETA
-    let etd='', eta='';
-    if (yETD) {
-      const ts = atY(col,yETD,6);
-      etd = ts[0]?.text||''; eta = ts[1]?.text||'';
-    }
+    // ── ETD / ETA ──
+    let etd='',eta='';
+    if(yETD){const ts=atY(col,yETD,6);etd=ts[0]?.text||'';eta=ts[1]?.text||'';}
 
-    // ETE / NM
-    let ete='', nm='';
-    if (yETE) {
-      const row = atY(col,yETE,6);
-      ete = row[0]?.text||'';
-      const ni = row.findIndex(t=>/^\d+$/.test(t.text));
-      if (ni>=0) nm = row[ni].text;
-    }
-
-    // Est Burn
-    let estBurn='';
-    if (yBurn) {
-      const bv = atY(col,yBurn,8).find(t=>/^\d{2,4}$/.test(t.text));
-      estBurn = bv?.text||'';
-    }
-
-    // FBO rows (y 430-470 for dept FBO, y 475-520 for arrv FBO)
-    const grpRows = (colArr, yMin, yMax) => {
-      const rs=[]; let cur=[],ly=null;
-      for (const it of colArr.filter(i=>i.y>=yMin&&i.y<=yMax).sort((a,b)=>a.y-b.y||a.x-b.x)) {
-        if (ly!==null&&Math.abs(it.y-ly)>7){if(cur.length)rs.push(cur.map(i=>i.text).join(' '));cur=[];}
-        cur.push(it);ly=it.y;
+    // ── ETE / NM ──
+    let ete='',nm='';
+    if(yETE){
+      const row=atY(col,yETE,8);
+      // ETE: first time-format item
+      const eteI=row.find(t=>/^\d{2}:\d{2}$/.test(t.text));
+      ete=eteI?.text||'';
+      // NM: number immediately before or after 'nm'
+      const nmIdx=row.findIndex(t=>t.text==='nm');
+      if(nmIdx>0) nm=row[nmIdx-1].text;
+      else {
+        const nmI=row.find(t=>/^\d+$/.test(t.text));
+        if(nmI) nm=nmI.text;
       }
-      if(cur.length)rs.push(cur.map(i=>i.text).join(' '));
-      return rs;
-    };
-
-    const dFBORows = grpRows(col, 428, 470);
-    const aFBORows = grpRows(col, 475, 522);
-    const deptFBO      = dFBORows[0]||'';
-    const deptFBOPhone = dFBORows[1]||'';
-    const arrvFBO      = aFBORows[0]||'';
-    const arrvFBOPhone = aFBORows[1]||'';
-
-    // Passengers
-    const passengers = [];
-    const paxRow = col.filter(i=>i.y>=522&&i.y<=540).sort((a,b)=>a.x-b.x);
-    if (paxRow.length) {
-      const pt = paxRow.map(i=>i.text).join(' ');
-      const pm = pt.match(/(?:\d+\.\s*)?([A-Z][a-z]+,\s*[A-Z][a-z]+)\s*\((\d+)\)/);
-      if (pm) passengers.push({ name: pm[1], weight: parseInt(pm[2]) });
     }
 
-    // PAX transport
-    const yPaxDept = items.filter(i=>i.x<110&&i.text==='TRANS').sort((a,b)=>a.y-b.y)[0]?.y;
-    const yPaxArrv = items.filter(i=>i.x<110&&i.text==='TRANS').sort((a,b)=>a.y-b.y)[1]?.y;
-    const paxDeptTrans = yPaxDept ? col.filter(i=>Math.abs(i.y-yPaxDept)<8).sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ') : '';
-    const paxArrvTrans = yPaxArrv ? col.filter(i=>Math.abs(i.y-yPaxArrv)<8).sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ') : '';
+    // ── Est Burn ──
+    let estBurn='';
+    if(yBurn){
+      const bv=atY(col,yBurn,10).find(t=>/^\d{2,4}$/.test(t.text));
+      estBurn=bv?.text||'';
+    }
+
+    // ── FBO SECTION ──
+    // DEPT FBO: y 428-470, ARRV FBO: y 475-520
+    const dFBORows = groupRows(col, 428, 472);
+    const aFBORows = groupRows(col, 473, 522);
+
+    // Row 0 = name, Row 1 = phone/fax, Row 2 = UNIC/ARINC
+    const deptFBO      = dFBORows[0]?.map(i=>i.text).join(' ')||'';
+    const dFBORow1     = dFBORows[1]||[];
+    const dFBORow2     = dFBORows[2]||[];
+    const [deptFBOPhone, deptFBOFax]   = splitLR(dFBORow1, li);
+    const [deptFBOUnic, deptFBOArinc]  = splitLR(dFBORow2, li);
+
+    const arrvFBO      = aFBORows[0]?.map(i=>i.text).join(' ')||'';
+    const aFBORow1     = aFBORows[1]||[];
+    const aFBORow2     = aFBORows[2]||[];
+    const [arrvFBOPhone, arrvFBOFax]   = splitLR(aFBORow1, li);
+    const [arrvFBOUnic, arrvFBOArinc]  = splitLR(aFBORow2, li);
+
+    // ── PASSENGERS ──
+    const passengers = [];
+    const paxRows = groupRows(col, 522, 625);
+    for (const row of paxRows) {
+      const pt = row.map(i=>i.text).join(' ');
+      // Match: "1. Last, First (L) (weight)" or "1. Last, First (weight)"
+      // The (L) means lead passenger — capture it
+      const pm = pt.match(/(?:\d+\.\s*)?([A-Za-z]+,\s*[A-Za-z]+(?:\s+[A-Za-z]+)?)\s*(\(L\))?\s*\((\d{2,4})\)/);
+      if (pm) {
+        passengers.push({
+          name:   pm[1].trim(),
+          lead:   !!pm[2],
+          weight: parseInt(pm[3])
+        });
+      }
+    }
+
+    // ── PAX transport ──
+    const yTransLabels = items.filter(i=>i.x<110&&i.text==='TRANS').sort((a,b)=>a.y-b.y);
+    const yPaxDept = yTransLabels[0]?.y;
+    const yPaxArrv = yTransLabels[1]?.y;
+    const paxDeptTrans = yPaxDept ? atY(col,yPaxDept,8).map(i=>i.text).join(' ') : '';
+    const paxArrvTrans = yPaxArrv ? atY(col,yPaxArrv,8).map(i=>i.text).join(' ') : '';
 
     legs.push({
       dept, dest, deptName, destName,
       etd, eta, ete, nm, estBurn,
-      deptFBO, deptFBOPhone, arrvFBO, arrvFBOPhone,
+      deptFBO, deptFBOPhone, deptFBOFax, deptFBOUnic, deptFBOArinc,
+      arrvFBO, arrvFBOPhone, arrvFBOFax, arrvFBOUnic, arrvFBOArinc,
       passengers, paxDeptTrans, paxArrvTrans, catering: '',
       offTime:'', onTime:'', pilotFlying:'',
       fltMinutes:'', fltTenths:'',
@@ -1708,6 +1738,7 @@ async function parsePorsidePDF(file) {
            localDate: tripLocalDate, pic: tripPIC, sic: tripSIC,
            notes: legNotes, legs };
 }
+
 
 // ── Review modal ──────────────────────────────────────────────────────────
 let importedData = null;
@@ -1746,9 +1777,17 @@ function showImportReview(parsed) {
         <div class="fg"><label class="lbl">DEPT FBO Phone</label><input type="text" id="ir-l${i}-dfph" class="inp-sm" value="${esc(leg.deptFBOPhone)}"></div>
         <div class="fg"><label class="lbl">ARRV FBO</label><input type="text" id="ir-l${i}-afbo" class="inp-sm" value="${esc(leg.arrvFBO)}"></div>
       </div>
-      <div class="g2" style="margin-bottom:8px">
+      <div class="g4" style="margin-bottom:8px">
+        <div class="fg"><label class="lbl">DEPT FBO Fax</label><input type="text" id="ir-l${i}-dffx" class="inp-sm" value="${esc(leg.deptFBOFax)}"></div>
+        <div class="fg"><label class="lbl">DEPT UNIC</label><input type="text" id="ir-l${i}-dfun" class="inp-sm" value="${esc(leg.deptFBOUnic)}"></div>
+        <div class="fg"><label class="lbl">DEPT ARINC</label><input type="text" id="ir-l${i}-dfar" class="inp-sm" value="${esc(leg.deptFBOArinc)}"></div>
         <div class="fg"><label class="lbl">ARRV FBO Phone</label><input type="text" id="ir-l${i}-afph" class="inp-sm" value="${esc(leg.arrvFBOPhone)}"></div>
-        <div class="fg"><label class="lbl">Passengers</label><input type="text" id="ir-l${i}-pax" class="inp-sm" value="${esc((leg.passengers||[]).map(p=>p.name+', '+p.weight).join('; '))}"></div>
+      </div>
+      <div class="g4" style="margin-bottom:8px">
+        <div class="fg"><label class="lbl">ARRV FBO Fax</label><input type="text" id="ir-l${i}-affx" class="inp-sm" value="${esc(leg.arrvFBOFax)}"></div>
+        <div class="fg"><label class="lbl">ARRV UNIC</label><input type="text" id="ir-l${i}-afun" class="inp-sm" value="${esc(leg.arrvFBOUnic)}"></div>
+        <div class="fg"><label class="lbl">ARRV ARINC</label><input type="text" id="ir-l${i}-afar" class="inp-sm" value="${esc(leg.arrvFBOArinc)}"></div>
+        <div class="fg"><label class="lbl">Passengers</label><input type="text" id="ir-l${i}-pax" class="inp-sm" value="${esc((leg.passengers||[]).map(p=>p.name+(p.lead?' (L)':'')+', '+p.weight).join('; '))}"></div>
       </div>
     </div>
   `).join('');
@@ -1780,8 +1819,14 @@ async function confirmImport() {
       estBurn:      document.getElementById(`ir-l${i}-burn`)?.value||'',
       deptFBO:      document.getElementById(`ir-l${i}-dfbo`)?.value||'',
       deptFBOPhone: document.getElementById(`ir-l${i}-dfph`)?.value||'',
+      deptFBOFax:   document.getElementById(`ir-l${i}-dffx`)?.value||'',
+      deptFBOUnic:  document.getElementById(`ir-l${i}-dfun`)?.value||'',
+      deptFBOArinc: document.getElementById(`ir-l${i}-dfar`)?.value||'',
       arrvFBO:      document.getElementById(`ir-l${i}-afbo`)?.value||'',
       arrvFBOPhone: document.getElementById(`ir-l${i}-afph`)?.value||'',
+      arrvFBOFax:   document.getElementById(`ir-l${i}-affx`)?.value||'',
+      arrvFBOUnic:  document.getElementById(`ir-l${i}-afun`)?.value||'',
+      arrvFBOArinc: document.getElementById(`ir-l${i}-afar`)?.value||'',
       passengers,
     };
   });
