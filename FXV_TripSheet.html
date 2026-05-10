@@ -1556,12 +1556,29 @@ async function parsePorsidePDF(file) {
   for (const h of legHdrs) { if (!seen.has(h.num)) { seen.add(h.num); uLegs.push(h); } }
   const numLegs = uLegs.length || 2;
 
-  const colBounds = uLegs.map((lh, i) => ({
-    start: i === 0 ? 110 : (uLegs[i-1].x + lh.x)/2,
-    end:   i < uLegs.length-1 ? (lh.x + uLegs[i+1].x)/2 : 9999
-  }));
+  // Build column bounds — fallback to known Portside layout if detection fails
+  let colBounds = [];
+  if (uLegs.length >= 2) {
+    colBounds = uLegs.map((lh, i) => ({
+      start: i === 0 ? 110 : (uLegs[i-1].x + lh.x)/2,
+      end:   i < uLegs.length-1 ? (lh.x + uLegs[i+1].x)/2 : 9999
+    }));
+  } else {
+    // Fallback: use known Portside 3-leg column layout
+    colBounds = [
+      { start: 110, end: 256 },
+      { start: 256, end: 417 },
+      { start: 417, end: 9999 }
+    ];
+  }
 
-  const colOf = (idx) => items.filter(i => i.x >= colBounds[idx].start && i.x < colBounds[idx].end);
+  // Clamp numLegs to colBounds length
+  const safeNumLegs = Math.min(numLegs, colBounds.length);
+
+  const colOf = (idx) => {
+    if (!colBounds[idx]) return [];
+    return items.filter(i => i.x >= colBounds[idx].start && i.x < colBounds[idx].end);
+  };
   const atY   = (col, y, tol=7) => col.filter(i=>Math.abs(i.y-y)<=tol).sort((a,b)=>a.x-b.x);
 
   // ── Reference Y positions from label column (x<110) ──
@@ -1584,7 +1601,7 @@ async function parsePorsidePDF(file) {
   let tripLocalDate = '', tripPIC = '', tripSIC = '';
   const legs = [];
 
-  for (let li = 0; li < numLegs; li++) {
+  for (let li = 0; li < safeNumLegs; li++) {
     const col = colOf(li);
 
     // Date
