@@ -1645,37 +1645,36 @@ async function parsePorsidePDF(file) {
   // ── Full text (reading order) for regex-based header extraction ──
   const fullText = items.slice().sort((a,b)=>a.y-b.y||a.x-b.x).map(i=>i.text).join(' ');
 
-  // ── HEADER: use position-based lookup (regex on sorted text fails
-  //    because trip number pixel-y is slightly above the "Trip:" label) ──
-
-  // Find label item, then grab items to its right on the same line (tol=4px)
-  const hdrItem = (labelText) =>
-    items.find(i => i.text === labelText) ||
-    items.find(i => i.text.startsWith(labelText.replace(':','')));
-
-  const hdrRow = (labelText, tol=4) => {
-    const lbl = hdrItem(labelText);
-    if (!lbl) return [];
-    return items.filter(i => Math.abs(i.y - lbl.y) <= tol && i.x > lbl.x)
-      .sort((a,b) => a.x - b.x);
-  };
+  // ── HEADER: pure coordinate-based extraction ──
+  // The Portside PDF header always has a fixed zone:
+  //   Trip number: 4-6 digit number at y < 45, x 200-400
+  //   Aircraft:    N-number at y 35-55
+  //   Requester:   names at y 49-58, x > 265
 
   let tripNumber='', program='';
-  const tripRow = hdrRow('Trip:');
-  const numItem = tripRow.find(i => /^\d{4,6}$/.test(i.text));
-  if (numItem) {
-    tripNumber = numItem.text;
-    program = tripRow.filter(i => i.x > numItem.x && i.text !== '/')
+  // Trip number is always a 4-6 digit number near top-center of page
+  const tripNumItem = items.find(i => /^\d{4,6}$/.test(i.text) && i.y < 45 && i.x > 200 && i.x < 420);
+  if (tripNumItem) {
+    tripNumber = tripNumItem.text;
+    // Program: items to the right of the number on the same y line (±5px)
+    program = items
+      .filter(i => Math.abs(i.y - tripNumItem.y) < 5 && i.x > tripNumItem.x && i.text !== '/')
+      .sort((a,b) => a.x - b.x)
       .map(i => i.text).join(' ').trim();
   }
 
   let aircraft='';
-  const acRow = hdrRow('Aircraft:');
-  if (acRow.length) aircraft = acRow[0].text;
+  // Aircraft tail number: always matches N + digit + alphanums, at y 35-55
+  const acItem = items.find(i => /^N\d[A-Z0-9]{2,5}$/.test(i.text) && i.y > 35 && i.y < 55);
+  if (acItem) aircraft = acItem.text;
 
   let tripRequester='';
-  const reqRow = hdrRow('Requester:');
-  if (reqRow.length) tripRequester = reqRow.map(i=>i.text).join(' ').trim();
+  // Requester text: items at y 49-58, x > 265 (right of label area)
+  // Exclude PRINTED date items which appear at y > 57
+  tripRequester = items
+    .filter(i => i.y > 49 && i.y < 58 && i.x > 265)
+    .sort((a,b) => a.x - b.x)
+    .map(i => i.text).join(' ').trim();
 
   // ── COLUMN DETECTION via LEG headers ──
   const legWords = items.filter(i => i.text === 'LEG');
